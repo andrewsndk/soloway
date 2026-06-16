@@ -27,7 +27,7 @@ const Loader = ({ onFinish }: { onFinish: () => void }) => {
           <img
             src="/videos/video.gif"
             alt="Loading..."
-            className="w-[85vw] md:w-[40vw] max-w-[500px] block mx-auto"
+            className="w-[70vw] md:w-[30vw] max-w-[380px] block mx-auto"
             style={{ clipPath: "inset(0 0 15% 0)" }}
           />
         </motion.div>
