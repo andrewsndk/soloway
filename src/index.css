@@ -1,0 +1,130 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Caveat:wght@400;600;700&display=swap');
+
+@font-face {
+  font-family: 'Brestol';
+  src: url('/fonts/Bristol.otf') format('opentype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* Палітра: #eadbc2 #7f794e #6e502d #e9babd #f29bac (+ білий для карток) */
+  :root {
+    /* #f2e4a7 — основний фон сторінки */
+    --background: 49 78% 80%;
+    /* #6e502d — основний колір тексту */
+    --foreground: 32 42% 30%;
+
+    /* картки та підняті поверхні — білий */
+    --card: 0 0% 100%;
+    --card-foreground: 32 42% 30%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 32 42% 30%;
+
+    /* #f29bac — кнопки, акцент «арки» програм */
+    --primary: 348 77% 78%;
+    --primary-foreground: 32 42% 30%;
+
+    /* #e9babd — вторинні плашки, прогрес, м’який рожевий блок */
+    --secondary: 356 52% 82%;
+    --secondary-foreground: 32 42% 30%;
+
+    /* приглушені блоки — #eadbc2 */
+    --muted: 38 49% 84%;
+    --muted-foreground: 53 24% 40%;
+
+    /* #7f794e — оливковий акцент (блоби, підкладки) */
+    --accent: 53 24% 40%;
+    --accent-foreground: 38 49% 84%;
+
+    --destructive: 32 42% 30%;
+    --destructive-foreground: 38 49% 84%;
+
+    --border: 32 22% 68%;
+    --input: 32 22% 68%;
+    --ring: 348 77% 78%;
+
+    --radius: 1rem;
+
+    /* точно #fff9e6 — hero та секція «Про нас» */
+    --mediator: 45.6 100% 95.1%;
+
+    --cream: 38 49% 84%;
+    --peach: 348 77% 78%;
+    --soft-pink: 356 52% 82%;
+    --warm-yellow: 0 0% 100%;
+    --soft-orange: 38 49% 84%;
+
+    --font-display: 'Brestol', 'Plus Jakarta Sans', sans-serif;
+    --font-body: 'Plus Jakarta Sans', sans-serif;
+    --font-hero: 'Brestol', sans-serif;
+    --font-main: 'Chalkboard', 'Chalkboard SE', 'Comic Sans MS', sans-serif;
+    --font-handwritten: 'Caveat', cursive;
+
+    --sidebar-background: 38 49% 84%;
+    --sidebar-foreground: 32 42% 30%;
+    --sidebar-primary: 348 77% 78%;
+    --sidebar-primary-foreground: 32 42% 30%;
+    --sidebar-accent: 53 24% 40%;
+    --sidebar-accent-foreground: 38 49% 84%;
+    --sidebar-border: 32 22% 68%;
+    --sidebar-ring: 348 77% 78%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-main);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-main);
+    font-weight: normal;
+  }
+
+  .font-hero {
+    font-family: var(--font-hero);
+  }
+}
+
+@layer utilities {
+  .font-handwritten {
+    font-family: var(--font-handwritten);
+  }
+
+  .text-gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--peach)), hsl(var(--warm-yellow)));
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .organic-shape {
+    border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+  }
+
+  .blob-button {
+    border-radius: 46% 54% 50% 50% / 46% 45% 55% 54%;
+  }
+
+  .bg-blob-pink {
+    background: hsl(var(--soft-pink));
+    border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
+  }
+
+  .bg-blob-yellow {
+    background: hsl(var(--warm-yellow));
+    border-radius: 30% 70% 70% 30% / 30% 30% 70% 70%;
+  }
+}

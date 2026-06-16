@@ -1,0 +1,37 @@
+import { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+
+const Loader = ({ onFinish }: { onFinish: () => void }) => {
+  const [isVisible, setIsVisible] = useState(true);
+
+  // Функція для завершення лоадера
+  const handleFinish = () => {
+    setIsVisible(false);
+    setTimeout(onFinish, 1000); // Час на анімацію зникнення
+  };
+
+  return (
+    <AnimatePresence>
+      {isVisible && (
+        <motion.div
+          initial={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 1 }}
+          className="fixed inset-0 z-[9999] bg-[#f2e4a7] flex items-center justify-center overflow-hidden p-10"
+        >
+          <video
+            src="/videos/video.mp4"
+            autoPlay
+            muted
+            playsInline
+            onEnded={handleFinish}
+            className="w-[85vw] md:w-[40vw] max-w-[500px] block mx-auto"
+            style={{ clipPath: "inset(0 0 15% 0)" }}
+          />
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+};
+
+export default Loader;
