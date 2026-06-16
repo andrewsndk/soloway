@@ -22,7 +22,7 @@ const Loader = ({ onFinish }: { onFinish: () => void }) => {
           initial={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 1 }}
-          className="fixed inset-0 z-[9999] bg-[#f2e4a7] flex items-center justify-center overflow-hidden p-10"
+          className="fixed inset-0 z-[9999] bg-[#f0dd9d] flex items-center justify-center overflow-hidden p-10"
         >
           <img
             src="/videos/video.gif"
