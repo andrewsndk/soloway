@@ -29,7 +29,7 @@ const ProgramsSection = () => {
     <section id="programs" className="relative py-16 md:py-32 overflow-hidden bg-white md:mt-12">
       {/* Pink arch - mediator upwards */}
       <div 
-        className="absolute inset-x-[-50%] md:inset-x-[-10%] top-0 h-full bg-secondary" 
+        className="absolute inset-x-[-65%] md:inset-x-[-10%] top-0 h-full bg-secondary" 
         style={{ borderRadius: "50% 50% 0 0" }}
       />
 
