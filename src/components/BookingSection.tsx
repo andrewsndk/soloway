@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
@@ -10,20 +10,106 @@ import { format } from "date-fns";
 import { uk } from "date-fns/locale";
 
 const timeSlots = [
-  "09:00", "10:00", "11:00", "12:00", "14:00", "15:00", "16:00", "17:00"
+  "09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "12:00", "12:30",
+  "13:00", "13:30", "14:00", "14:30", "15:00", "15:30", "16:00", "16:30",
+  "17:00", "17:30", "18:00", "18:30", "19:00", "19:30"
 ];
+
+interface TimeWheelPickerProps {
+  slots: string[];
+  selected: string;
+  onChange: (value: string) => void;
+}
+
+const TimeWheelPicker = ({ slots, selected, onChange }: TimeWheelPickerProps) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const itemHeight = 44; // px
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  useEffect(() => {
+    const idx = slots.indexOf(selected);
+    if (idx !== -1 && containerRef.current) {
+      containerRef.current.scrollTop = idx * itemHeight;
+      setActiveIdx(idx);
+    }
+  }, [selected, slots]);
+
+  const handleScroll = () => {
+    if (!containerRef.current) return;
+    const scrollTop = containerRef.current.scrollTop;
+    const idx = Math.round(scrollTop / itemHeight);
+    if (idx >= 0 && idx < slots.length) {
+      setActiveIdx(idx);
+      if (slots[idx] !== selected) {
+        onChange(slots[idx]);
+      }
+    }
+  };
+
+  return (
+    <div className="relative w-full max-w-[200px] mx-auto h-[180px] bg-stone-50/50 rounded-2xl border border-secondary/20 overflow-hidden flex items-center justify-center shadow-inner">
+      <style>{`
+        .no-scrollbar::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
+      {/* Highlight/Lens Overlay */}
+      <div className="absolute left-0 right-0 h-[44px] pointer-events-none border-y border-secondary/20 bg-secondary/10 z-10 top-1/2 -translate-y-1/2" />
+
+      {/* Wheel Scroll Area */}
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="w-full h-full overflow-y-scroll snap-y snap-mandatory scroll-smooth py-[68px] no-scrollbar"
+        style={{
+          scrollbarWidth: "none",
+          msOverflowStyle: "none",
+        }}
+      >
+        {slots.map((slot, idx) => {
+          const distance = Math.abs(idx - activeIdx);
+          const scale = Math.max(0.8, 1 - distance * 0.1);
+          const opacity = Math.max(0.4, 1 - distance * 0.3);
+
+          return (
+            <div
+              key={slot}
+              onClick={() => {
+                if (containerRef.current) {
+                  containerRef.current.scrollTop = idx * itemHeight;
+                }
+              }}
+              className="h-[44px] flex items-center justify-center cursor-pointer snap-center select-none transition-all duration-200 ease-out"
+              style={{
+                transform: `scale(${scale})`,
+                opacity: opacity,
+              }}
+            >
+              <span className={`text-lg md:text-xl font-extrabold ${idx === activeIdx ? 'text-primary' : 'text-foreground/75'}`}>
+                {slot}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
 const BookingSection = () => {
   const [date, setDate] = useState<Date | undefined>(new Date());
-  const [selectedTime, setSelectedTime] = useState<string>("");
+  const [selectedTime, setSelectedTime] = useState<string>(timeSlots[0]);
+  const [selectedProgram, setSelectedProgram] = useState<string>("Цілий день");
+  const [customHours, setCustomHours] = useState("");
   const [name, setName] = useState("");
+  const [childName, setChildName] = useState("");
   const [phone, setPhone] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!date || !selectedTime || !name || !phone) {
+    if (!date || !selectedTime || !name || !childName || !phone || (selectedProgram === "Своя кількість годин" && !customHours)) {
       toast.error("Будь ласка, заповніть усі поля");
       return;
     }
@@ -51,14 +137,24 @@ const BookingSection = () => {
           Authorization: `Bearer ${supabaseAnonKey}`,
           apikey: supabaseAnonKey,
         },
-        body: JSON.stringify({ name, phone, visitDate, visitTime: selectedTime }),
+        body: JSON.stringify({
+          name,
+          childName,
+          phone,
+          visitDate,
+          visitTime: selectedTime,
+          program: selectedProgram === "Своя кількість годин" ? `Своя кількість годин (${customHours})` : selectedProgram
+        }),
       });
 
       if (response.ok) {
         toast.success("Вашу заявку успішно надіслано! Ми зателефонуємо вам найближчим часом.");
         setName("");
+        setChildName("");
         setPhone("");
-        setSelectedTime("");
+        setCustomHours("");
+        setSelectedTime(timeSlots[0]);
+        setSelectedProgram("Цілий день");
       } else {
         throw new Error("Failed to send visit request");
       }
@@ -108,7 +204,7 @@ const BookingSection = () => {
                 <Calendar
                   mode="single"
                   selected={date}
-                  onSelect={setDate}
+                  onSelect={(d) => d && setDate(d)}
                   className="rounded-md"
                   locale={uk}
                 />
@@ -125,28 +221,52 @@ const BookingSection = () => {
               <div>
                 <div className="flex items-center gap-3 text-xl font-bold text-foreground mb-6">
                   <Clock className="text-secondary w-6 h-6" />
-                  <span>Оберіть час</span>
+                  <span>Час, коли пташенятко до нас завітає</span>
                 </div>
-                <div className="grid grid-cols-4 gap-2 sm:gap-3">
-                  {timeSlots.map((slot) => (
-                    <button
-                      key={slot}
-                      type="button"
-                      onClick={() => setSelectedTime(slot)}
-                      className={`py-2.5 md:py-3 px-2 rounded-xl text-sm font-bold transition-all border-2 ${
-                        selectedTime === slot
-                          ? "bg-secondary text-white border-secondary shadow-lg scale-105"
-                          : "bg-white text-foreground border-stone-100 hover:border-secondary/30 hover:bg-secondary/5"
-                      }`}
-                    >
-                      {slot}
-                    </button>
-                  ))}
-                </div>
+                <TimeWheelPicker
+                  slots={timeSlots}
+                  selected={selectedTime}
+                  onChange={setSelectedTime}
+                />
               </div>
 
               <form onSubmit={handleSubmit} className="space-y-5 md:space-y-6">
                 <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="program" className="flex items-center gap-2 text-sm font-bold ml-2">
+                      <span className="text-primary font-bold">✨</span> Формат відвідування
+                    </Label>
+                    <select
+                      id="program"
+                      value={selectedProgram}
+                      onChange={(e) => setSelectedProgram(e.target.value)}
+                      className="w-full rounded-xl border-2 border-stone-100 h-12 focus:border-primary px-4 bg-white text-foreground font-medium outline-none cursor-pointer"
+                    >
+                      <option value="Цілий день">Цілий день (1390 грн)</option>
+                      <option value="Адаптація">Адаптація (300 грн)</option>
+                      <option value="На 3 години">На 3 години (850 грн)</option>
+                      <option value="На 1 годину">На 1 годину (500 грн)</option>
+                      <option value="Своя кількість годин">Своя кількість годин</option>
+                    </select>
+                  </div>
+                  {selectedProgram === "Своя кількість годин" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="customHours" className="flex items-center gap-2 text-sm font-bold ml-2">
+                        <span className="text-secondary font-bold">⏰</span> Вкажіть кількість годин
+                      </Label>
+                      <Input
+                        id="customHours"
+                        type="number"
+                        min="1"
+                        max="24"
+                        placeholder="Наприклад: 5"
+                        value={customHours}
+                        onChange={(e) => setCustomHours(e.target.value)}
+                        className="rounded-xl border-2 border-stone-100 h-12 focus:border-secondary px-4"
+                        required
+                      />
+                    </div>
+                  )}
                   <div className="space-y-2">
                     <Label htmlFor="name" className="flex items-center gap-2 text-sm font-bold ml-2">
                       <User className="w-4 h-4 text-primary" /> Ваше ім'я
@@ -157,6 +277,19 @@ const BookingSection = () => {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       className="rounded-xl border-2 border-stone-100 h-12 focus:border-primary px-4"
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="childName" className="flex items-center gap-2 text-sm font-bold ml-2">
+                      <User className="w-4 h-4 text-secondary" /> Ім'я дитини
+                    </Label>
+                    <Input
+                      id="childName"
+                      placeholder="Наприклад: Олександр"
+                      value={childName}
+                      onChange={(e) => setChildName(e.target.value)}
+                      className="rounded-xl border-2 border-stone-100 h-12 focus:border-secondary px-4"
                       required
                     />
                   </div>

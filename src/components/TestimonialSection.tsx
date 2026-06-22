@@ -14,8 +14,8 @@ const TestimonialSection = () => {
             transition={{ duration: 0.6 }}
             className="flex-shrink-0"
           >
-            <div className="w-36 h-36 md:w-56 md:h-56 flex items-center justify-center overflow-hidden organic-shape border-8 border-card shadow-xl bg-accent">
-              <KidzyLogo className="h-24 md:h-32 w-auto" />
+            <div className="w-36 h-36 md:w-56 md:h-56 flex items-center justify-center overflow-hidden organic-shape border-4 border-card shadow-xl bg-accent">
+              <KidzyLogo className="h-32 md:h-48 w-auto" />
             </div>
           </motion.div>
 
@@ -28,7 +28,7 @@ const TestimonialSection = () => {
             className="flex-1"
           >
             <p className="text-foreground text-lg md:text-2xl leading-relaxed font-medium text-center md:text-left">
-              Ваші історії — це натхнення для нас. Чекаємо на ваші відгуки, щоб розділити ці моменти з іншими.
+              Ваші історії надихають нас рухатися вперед. Будемо щиро вдячні за ваш відгук — він допоможе нам ділитися цими особливими моментами з іншими.
             </p>
           </motion.div>
         </div>

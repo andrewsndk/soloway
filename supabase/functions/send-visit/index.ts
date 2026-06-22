@@ -5,9 +5,11 @@ const corsHeaders = {
 
 type VisitPayload = {
   name?: unknown;
+  childName?: unknown;
   phone?: unknown;
   visitDate?: unknown;
   visitTime?: unknown;
+  program?: unknown;
 };
 
 function jsonResponse(payload: Record<string, unknown>, status = 200) {
@@ -30,20 +32,26 @@ function escapeHtml(value: string) {
 
 function buildTelegramMessage({
   name,
+  childName,
   phone,
   visitDate,
   visitTime,
+  program,
 }: {
   name: string;
+  childName: string;
   phone: string;
   visitDate: string;
   visitTime: string;
+  program: string;
 }) {
   return [
     "📅 <b>Нова заявка на візит</b>",
     "",
-    `<b>Ім'я:</b> ${escapeHtml(name)}`,
+    `<b>Ім'я батька/матері:</b> ${escapeHtml(name)}`,
+    `<b>Ім'я дитини:</b> ${escapeHtml(childName)}`,
     `<b>Телефон:</b> ${escapeHtml(phone)}`,
+    `<b>Формат відвідування:</b> ${escapeHtml(program)}`,
     `<b>Дата:</b> ${escapeHtml(visitDate)}`,
     `<b>Час:</b> ${escapeHtml(visitTime)}`,
   ].join("\n");
@@ -74,11 +82,13 @@ Deno.serve(async (request) => {
   }
 
   const name = cleanField(payload.name);
+  const childName = cleanField(payload.childName);
   const phone = cleanField(payload.phone);
   const visitDate = cleanField(payload.visitDate);
   const visitTime = cleanField(payload.visitTime);
+  const program = cleanField(payload.program);
 
-  if (!name || !phone || !visitDate || !visitTime) {
+  if (!name || !childName || !phone || !visitDate || !visitTime || !program) {
     return jsonResponse({ error: "Missing required fields" }, 400);
   }
 
@@ -88,7 +98,7 @@ Deno.serve(async (request) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: chatId,
-        text: buildTelegramMessage({ name, phone, visitDate, visitTime }),
+        text: buildTelegramMessage({ name, childName, phone, visitDate, visitTime, program }),
         parse_mode: "HTML",
       }),
     });
