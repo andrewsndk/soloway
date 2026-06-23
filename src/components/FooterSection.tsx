@@ -43,8 +43,7 @@ const FooterSection = () => {
           </div>
           <div>
             <h4 className="font-bold mb-4 text-foreground">Години роботи</h4>
-            <p className="text-muted-foreground text-sm mb-1">Пн — Пт: 9:00 — 19:30</p>
-            <p className="text-muted-foreground text-sm">Сб — Нд: вихідний</p>
+            <p className="text-muted-foreground text-sm mb-1">Пн — Нд: 9:00 — 19:30</p>
           </div>
         </div>
         <div className="border-t border-stone-200 mt-8 md:mt-12 pt-6 text-center text-muted-foreground/60 text-xs">
