@@ -15,6 +15,14 @@ const timeSlots = [
   "17:00", "17:30", "18:00", "18:30", "19:00", "19:30"
 ];
 
+const minBookingDate = new Date(2026, 6, 1);
+
+const getDefaultBookingDate = () => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today >= minBookingDate ? today : minBookingDate;
+};
+
 interface TimeWheelPickerProps {
   slots: string[];
   selected: string;
@@ -97,7 +105,7 @@ const TimeWheelPicker = ({ slots, selected, onChange }: TimeWheelPickerProps) =>
 };
 
 const BookingSection = () => {
-  const [date, setDate] = useState<Date | undefined>(new Date());
+  const [date, setDate] = useState<Date | undefined>(getDefaultBookingDate);
   const [selectedTime, setSelectedTime] = useState<string>(timeSlots[0]);
   const [selectedProgram, setSelectedProgram] = useState<string>("Цілий день");
   const [customHours, setCustomHours] = useState("");
@@ -111,6 +119,11 @@ const BookingSection = () => {
 
     if (!date || !selectedTime || !name || !childName || !phone || (selectedProgram === "Своя кількість годин" && !customHours)) {
       toast.error("Будь ласка, заповніть усі поля");
+      return;
+    }
+
+    if (date < minBookingDate) {
+      toast.error("Бронювання доступне з 1 липня 2026 року");
       return;
     }
 
@@ -205,6 +218,9 @@ const BookingSection = () => {
                   mode="single"
                   selected={date}
                   onSelect={(d) => d && setDate(d)}
+                  disabled={{ before: minBookingDate }}
+                  defaultMonth={minBookingDate}
+                  fromDate={minBookingDate}
                   className="rounded-md"
                   locale={uk}
                 />
