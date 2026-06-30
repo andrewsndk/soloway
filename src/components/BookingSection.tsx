@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Calendar as CalendarIcon, Clock, Phone, User, Send } from "lucide-react";
@@ -22,6 +23,11 @@ const getDefaultBookingDate = () => {
   today.setHours(0, 0, 0, 0);
   return today >= minBookingDate ? today : minBookingDate;
 };
+
+const childAgeOptions = ["2 роки", "3 роки", "4 роки", "5 років", "6 років"];
+
+const selectClassName =
+  "w-full rounded-xl border-2 border-stone-100 h-12 focus:border-primary px-4 bg-white text-foreground font-medium outline-none cursor-pointer";
 
 interface TimeWheelPickerProps {
   slots: string[];
@@ -110,14 +116,26 @@ const BookingSection = () => {
   const [selectedProgram, setSelectedProgram] = useState<string>("Цілий день");
   const [customHours, setCustomHours] = useState("");
   const [name, setName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [isNannyBooking, setIsNannyBooking] = useState(false);
   const [childName, setChildName] = useState("");
+  const [childAge, setChildAge] = useState(childAgeOptions[0]);
   const [phone, setPhone] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!date || !selectedTime || !name || !childName || !phone || (selectedProgram === "Своя кількість годин" && !customHours)) {
+    if (
+      !date ||
+      !selectedTime ||
+      !name ||
+      !lastName ||
+      !childName ||
+      !childAge ||
+      !phone ||
+      (selectedProgram === "Своя кількість годин" && !customHours)
+    ) {
       toast.error("Будь ласка, заповніть усі поля");
       return;
     }
@@ -152,7 +170,10 @@ const BookingSection = () => {
         },
         body: JSON.stringify({
           name,
+          lastName,
+          isNannyBooking,
           childName,
+          childAge,
           phone,
           visitDate,
           visitTime: selectedTime,
@@ -163,7 +184,10 @@ const BookingSection = () => {
       if (response.ok) {
         toast.success("Вашу заявку успішно надіслано! Ми зателефонуємо вам найближчим часом.");
         setName("");
+        setLastName("");
+        setIsNannyBooking(false);
         setChildName("");
+        setChildAge(childAgeOptions[0]);
         setPhone("");
         setCustomHours("");
         setSelectedTime(timeSlots[0]);
@@ -256,7 +280,7 @@ const BookingSection = () => {
                       id="program"
                       value={selectedProgram}
                       onChange={(e) => setSelectedProgram(e.target.value)}
-                      className="w-full rounded-xl border-2 border-stone-100 h-12 focus:border-primary px-4 bg-white text-foreground font-medium outline-none cursor-pointer"
+                      className={selectClassName}
                     >
                       <option value="Цілий день">Цілий день (1390 грн)</option>
                       <option value="Адаптація">Адаптація (300 грн)</option>
@@ -297,6 +321,30 @@ const BookingSection = () => {
                     />
                   </div>
                   <div className="space-y-2">
+                    <Label htmlFor="lastName" className="flex items-center gap-2 text-sm font-bold ml-2">
+                      <User className="w-4 h-4 text-primary" /> Ваше прізвище
+                    </Label>
+                    <Input
+                      id="lastName"
+                      placeholder="Наприклад: Коваленко"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      className="rounded-xl border-2 border-stone-100 h-12 focus:border-primary px-4"
+                      required
+                    />
+                  </div>
+                  <div className="flex items-start gap-3 rounded-xl border-2 border-stone-100 px-4 py-3">
+                    <Checkbox
+                      id="isNannyBooking"
+                      checked={isNannyBooking}
+                      onCheckedChange={(checked) => setIsNannyBooking(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <Label htmlFor="isNannyBooking" className="text-sm font-medium leading-snug cursor-pointer">
+                      Бронювання робить няня
+                    </Label>
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="childName" className="flex items-center gap-2 text-sm font-bold ml-2">
                       <User className="w-4 h-4 text-secondary" /> Ім'я дитини
                     </Label>
@@ -308,6 +356,24 @@ const BookingSection = () => {
                       className="rounded-xl border-2 border-stone-100 h-12 focus:border-secondary px-4"
                       required
                     />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="childAge" className="flex items-center gap-2 text-sm font-bold ml-2">
+                      <span className="text-secondary font-bold">🎂</span> Вік дитини
+                    </Label>
+                    <select
+                      id="childAge"
+                      value={childAge}
+                      onChange={(e) => setChildAge(e.target.value)}
+                      className={selectClassName}
+                      required
+                    >
+                      {childAgeOptions.map((age) => (
+                        <option key={age} value={age}>
+                          {age}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="phone" className="flex items-center gap-2 text-sm font-bold ml-2">
