@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchSettings, saveSettings, DEFAULT_SETTINGS, type AppSettings } from "@/lib/settings";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
+import { downloadDatabaseBackupCsv, downloadDatabaseBackupSql } from "@/lib/backup";
+import { DatabaseBackup, Download } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -42,6 +44,26 @@ function SettingsPage() {
 
   const setTariff = (k: keyof AppSettings["tariffs"], v: string) =>
     setS({ ...s, tariffs: { ...s.tariffs, [k]: Number(v) || 0 } });
+
+  const csvBackupMut = useMutation({
+    mutationFn: downloadDatabaseBackupCsv,
+    onSuccess: (counts) => {
+      toast.success(
+        `CSV бекап готовий: ${counts.clients} клієнтів, ${counts.bookings} бронювань, ${counts.audit_logs} дій`,
+      );
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const sqlBackupMut = useMutation({
+    mutationFn: downloadDatabaseBackupSql,
+    onSuccess: (counts) => {
+      toast.success(
+        `Supabase SQL бекап готовий: ${counts.clients} клієнтів, ${counts.bookings} бронювань, ${counts.audit_logs} дій`,
+      );
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
 
   return (
     <div className="space-y-4">
@@ -86,6 +108,35 @@ function SettingsPage() {
               ))}
               <p className="text-xs text-muted-foreground">Ключі форматів змінювати не можна — вони використовуються в логіці розрахунку.</p>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Бекап бази</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="text-sm text-muted-foreground">
+            Експортує клієнтів, бронювання, інструкції, історію дій і налаштування.
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => csvBackupMut.mutate()}
+              disabled={csvBackupMut.isPending || sqlBackupMut.isPending}
+            >
+              <Download className="mr-1 h-4 w-4" />
+              {csvBackupMut.isPending ? "Створення..." : "CSV бекап"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => sqlBackupMut.mutate()}
+              disabled={csvBackupMut.isPending || sqlBackupMut.isPending}
+            >
+              <DatabaseBackup className="mr-1 h-4 w-4" />
+              {sqlBackupMut.isPending ? "Створення..." : "Supabase SQL"}
+            </Button>
           </div>
         </CardContent>
       </Card>
