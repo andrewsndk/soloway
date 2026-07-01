@@ -1,3 +1,5 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -11,9 +13,12 @@ type VisitPayload = {
   childAge?: unknown;
   phone?: unknown;
   visitDate?: unknown;
+  visitDateIso?: unknown;
   visitTime?: unknown;
   program?: unknown;
 };
+
+type BookingFormat = "hour_1" | "hour_3" | "full_day" | "adaptation" | "other";
 
 function jsonResponse(payload: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -31,6 +36,27 @@ function escapeHtml(value: string) {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+function getProgramDetails(program: string): { format: BookingFormat; hours: number | null; amount: number } {
+  if (program.startsWith("Своя кількість годин")) {
+    const hoursMatch = program.match(/\((\d+(?:[.,]\d+)?)\)/);
+    const hours = hoursMatch ? Number(hoursMatch[1].replace(",", ".")) : null;
+    return { format: "other", hours, amount: 0 };
+  }
+
+  switch (program) {
+    case "Цілий день":
+      return { format: "full_day", hours: null, amount: 1390 };
+    case "Адаптація":
+      return { format: "adaptation", hours: null, amount: 300 };
+    case "На 3 години":
+      return { format: "hour_3", hours: null, amount: 850 };
+    case "На 1 годину":
+      return { format: "hour_1", hours: null, amount: 500 };
+    default:
+      return { format: "other", hours: null, amount: 0 };
+  }
 }
 
 function buildTelegramMessage({
@@ -80,9 +106,11 @@ Deno.serve(async (request) => {
 
   const botToken = Deno.env.get("TELEGRAM_BOT_TOKEN");
   const chatId = Deno.env.get("TELEGRAM_CHAT_ID");
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-  if (!botToken || !chatId) {
-    return jsonResponse({ error: "Telegram is not configured" }, 500);
+  if (!supabaseUrl || !serviceRoleKey) {
+    return jsonResponse({ error: "Supabase service role is not configured" }, 500);
   }
 
   let payload: VisitPayload;
@@ -100,41 +128,119 @@ Deno.serve(async (request) => {
   const childAge = cleanField(payload.childAge);
   const phone = cleanField(payload.phone);
   const visitDate = cleanField(payload.visitDate);
+  const visitDateIso = cleanField(payload.visitDateIso);
   const visitTime = cleanField(payload.visitTime);
   const program = cleanField(payload.program);
 
-  if (!name || !lastName || !childName || !childAge || !phone || !visitDate || !visitTime || !program) {
+  if (!name || !lastName || !childName || !childAge || !phone || !visitDate || !visitDateIso || !visitTime || !program) {
     return jsonResponse({ error: "Missing required fields" }, 400);
   }
 
   try {
-    const telegramResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text: buildTelegramMessage({
-          name,
-          lastName,
-          isNannyBooking,
-          childName,
-          childAge,
-          phone,
-          visitDate,
-          visitTime,
-          program,
-        }),
-        parse_mode: "HTML",
-      }),
+    const supabase = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false },
     });
 
-    if (!telegramResponse.ok) {
-      const telegramError = await telegramResponse.text();
-      console.error("Telegram API error:", telegramError);
-      return jsonResponse({ error: "Failed to send Telegram notification" }, 502);
+    const parentName = `${name} ${lastName}`.trim();
+    const programDetails = getProgramDetails(program);
+    const pickupNote = isNannyBooking ? "Бронювання робить няня" : null;
+    const parentQuestionnaire = [`Вік дитини: ${childAge}`, pickupNote].filter(Boolean).join("\n");
+
+    const { data: phoneMatches, error: phoneLookupError } = await supabase
+      .from("clients")
+      .select("id")
+      .eq("phone", phone)
+      .limit(1);
+
+    if (phoneLookupError) {
+      throw phoneLookupError;
     }
 
-    return jsonResponse({ ok: true });
+    let clientId = phoneMatches?.[0]?.id as string | undefined;
+
+    if (!clientId) {
+      const { data: nameMatches, error: nameLookupError } = await supabase
+        .from("clients")
+        .select("id")
+        .ilike("parent_name", parentName)
+        .ilike("child_name", childName)
+        .limit(1);
+
+      if (nameLookupError) {
+        throw nameLookupError;
+      }
+
+      clientId = nameMatches?.[0]?.id as string | undefined;
+    }
+
+    if (!clientId) {
+      const { data: createdClient, error: createClientError } = await supabase
+        .from("clients")
+        .insert({
+          parent_name: parentName,
+          child_name: childName,
+          phone,
+          who_can_pickup: pickupNote,
+          parent_questionnaire: parentQuestionnaire,
+        })
+        .select("id")
+        .single();
+
+      if (createClientError) {
+        throw createClientError;
+      }
+
+      clientId = createdClient.id;
+    }
+
+    const { error: bookingError } = await supabase.from("bookings").insert({
+      client_id: clientId,
+      parent_name: parentName,
+      child_name: childName,
+      phone,
+      format: programDetails.format,
+      hours: programDetails.hours,
+      visit_date: visitDateIso,
+      visit_time: visitTime,
+      source: "Сайт",
+      amount: programDetails.amount,
+      amount_override: false,
+      parent_comment: parentQuestionnaire || null,
+      status: "Нове",
+    });
+
+    if (bookingError) {
+      throw bookingError;
+    }
+
+    if (botToken && chatId) {
+      const telegramResponse = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: buildTelegramMessage({
+            name,
+            lastName,
+            isNannyBooking,
+            childName,
+            childAge,
+            phone,
+            visitDate,
+            visitTime,
+            program,
+          }),
+          parse_mode: "HTML",
+        }),
+      });
+
+      if (!telegramResponse.ok) {
+        const telegramError = await telegramResponse.text();
+        console.error("Telegram API error:", telegramError);
+      }
+    }
+
+    return jsonResponse({ ok: true, clientId });
   } catch (error) {
     console.error("Visit notification error:", error);
     return jsonResponse({ error: "Failed to send visit notification" }, 500);

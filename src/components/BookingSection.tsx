@@ -148,6 +148,7 @@ const BookingSection = () => {
     setIsSubmitting(true);
 
     const visitDate = format(date, "PPP", { locale: uk });
+    const visitDateIso = format(date, "yyyy-MM-dd");
 
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -176,6 +177,7 @@ const BookingSection = () => {
           childAge,
           phone,
           visitDate,
+          visitDateIso,
           visitTime: selectedTime,
           program: selectedProgram === "Своя кількість годин" ? `Своя кількість годин (${customHours})` : selectedProgram
         }),

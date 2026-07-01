@@ -21,9 +21,10 @@ import { BookingDialog } from "@/components/BookingDialog";
 import { ClientCardDialog } from "@/components/ClientCardDialog";
 import { fetchSettings, formatLabel } from "@/lib/settings";
 import { formatDate, formatTime, formatUAH } from "@/lib/pricing";
+import { PAYMENT_STATUSES } from "@/lib/payment";
 import { downloadCSV } from "@/lib/csv";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, ChevronRight, Download, Pencil, Plus, Trash2 } from "lucide-react";
+import { Banknote, ChevronLeft, ChevronRight, CircleAlert, CreditCard, Download, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/bookings")({
@@ -88,6 +89,17 @@ function BookingsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const paymentMut = useMutation({
+    mutationFn: async ({ id, payment_status }: { id: string; payment_status: string }) => {
+      const { error } = await supabase.from("bookings").update({ payment_status }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const exportCSV = () => {
     const rows = filtered.map((b) => ({
       Дата: b.visit_date,
@@ -100,6 +112,7 @@ function BookingsPage() {
       Джерело: b.source ?? "",
       Послуги: (b.extra_services ?? []).join("; "),
       Сума: b.amount,
+      Оплата: b.payment_status,
       Статус: b.status,
     }));
     downloadCSV(`bookings-${new Date().toISOString().slice(0,10)}.csv`, rows);
@@ -165,13 +178,14 @@ function BookingsPage() {
                 <TableHead>Формат</TableHead>
                 <TableHead>Джерело</TableHead>
                 <TableHead className="text-right">Сума</TableHead>
+                <TableHead>Оплата</TableHead>
                 <TableHead>Статус</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-6">Немає бронювань за цими фільтрами</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-6">Немає бронювань за цими фільтрами</TableCell></TableRow>
               )}
               {filtered.map((b) => (
                 <TableRow key={b.id}>
@@ -196,6 +210,23 @@ function BookingsPage() {
                   </TableCell>
                   <TableCell className="text-sm">{b.source}</TableCell>
                   <TableCell className="text-right font-semibold">{formatUAH(b.amount)}</TableCell>
+                  <TableCell>
+                    <Select
+                      value={b.payment_status ?? "не оплачено"}
+                      onValueChange={(payment_status) => paymentMut.mutate({ id: b.id, payment_status })}
+                    >
+                      <SelectTrigger className={`h-8 w-[190px] border ${paymentStyle(b.payment_status).trigger}`}>
+                        <PaymentStatusLabel status={b.payment_status} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAYMENT_STATUSES.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            <PaymentStatusLabel status={status} />
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
                   <TableCell><Badge variant={b.status === "Скасовано" ? "destructive" : "secondary"}>{b.status}</Badge></TableCell>
                   <TableCell>
                     <div className="flex gap-1 justify-end">
@@ -271,6 +302,7 @@ type BookingRow = {
   extra_services: string[];
   amount: number;
   amount_override: boolean;
+  payment_status: string;
   parent_comment: string | null;
   teacher_comment: string | null;
   status: string;
@@ -290,10 +322,47 @@ function toDraft(b: BookingRow) {
     extra_services: b.extra_services ?? [],
     amount: String(b.amount ?? 0),
     amount_override: !!b.amount_override,
+    payment_status: b.payment_status ?? "не оплачено",
     parent_comment: b.parent_comment ?? "",
     teacher_comment: b.teacher_comment ?? "",
     status: b.status,
   };
+}
+
+function paymentStyle(status?: string | null) {
+  switch (status) {
+    case "оплачено готівкою":
+      return {
+        icon: Banknote,
+        iconClass: "text-emerald-700",
+        trigger: "border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100",
+      };
+    case "оплачено карткою":
+      return {
+        icon: CreditCard,
+        iconClass: "text-sky-700",
+        trigger: "border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100",
+      };
+    default:
+      return {
+        icon: CircleAlert,
+        iconClass: "text-amber-700",
+        trigger: "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100",
+      };
+  }
+}
+
+function PaymentStatusLabel({ status }: { status?: string | null }) {
+  const normalized = status || "не оплачено";
+  const style = paymentStyle(normalized);
+  const Icon = style.icon;
+
+  return (
+    <span className="flex min-w-0 items-center gap-2 truncate">
+      <Icon className={`h-4 w-4 shrink-0 ${style.iconClass}`} />
+      <span className="truncate">{normalized}</span>
+    </span>
+  );
 }
 
 function bookingHours(b: BookingRow): number | null {

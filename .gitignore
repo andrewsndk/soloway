@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 *.local
+supabase/.temp/*
+!supabase/.temp/cli-latest
+!supabase/.temp/linked-project.json
 
 # Editor directories and files
 .vscode/*

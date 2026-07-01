@@ -14,7 +14,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, LayoutDashboard, Settings, Users, LogOut } from "lucide-react";
+import { CalendarDays, ClipboardList, LayoutDashboard, Settings, Users, LogOut } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -30,6 +30,7 @@ const NAV = [
   { to: "/dashboard", label: "Дашборд", icon: LayoutDashboard },
   { to: "/bookings", label: "Бронювання", icon: CalendarDays },
   { to: "/clients", label: "Клієнти", icon: Users },
+  { to: "/instructions", label: "Інструкції", icon: ClipboardList },
   { to: "/settings", label: "Налаштування", icon: Settings },
 ] as const;
 

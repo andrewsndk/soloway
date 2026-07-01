@@ -18,21 +18,25 @@ export type AppSettings = {
   sources: string[];
   extra_services: string[];
   statuses: string[];
+  instructions: {
+    administrator: string;
+    teacher: string;
+  };
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
   tariffs: {
-    hour_1: 180,
-    hour_3: 450,
-    full_day: 950,
-    adaptation: 0,
-    extra_per_hour: 180,
-    extra_per_hour_above3: 150,
+    hour_1: 500,
+    hour_3: 850,
+    full_day: 1390,
+    adaptation: 300,
+    extra_per_hour: 500,
+    extra_per_hour_above3: 300,
   },
   formats: [
     { key: "hour_1", label: "На 1 годину" },
     { key: "hour_3", label: "На 3 години" },
-    { key: "full_day", label: "Повний день" },
+    { key: "full_day", label: "Цілий день" },
     { key: "adaptation", label: "Адаптація" },
     { key: "other", label: "Інша кількість годин" },
   ],
@@ -48,6 +52,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
     "Фотозвіт",
   ],
   statuses: ["Нове", "Підтверджено", "Завершено", "Скасовано"],
+  instructions: {
+    administrator: "",
+    teacher: "",
+  },
 };
 
 export async function fetchSettings(): Promise<AppSettings> {

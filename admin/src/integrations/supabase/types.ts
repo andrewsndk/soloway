@@ -45,6 +45,7 @@ export type Database = {
           id: string
           parent_comment: string | null
           parent_name: string
+          payment_status: string
           phone: string | null
           source: string | null
           status: string
@@ -65,6 +66,7 @@ export type Database = {
           id?: string
           parent_comment?: string | null
           parent_name: string
+          payment_status?: string
           phone?: string | null
           source?: string | null
           status?: string
@@ -85,6 +87,7 @@ export type Database = {
           id?: string
           parent_comment?: string | null
           parent_name?: string
+          payment_status?: string
           phone?: string | null
           source?: string | null
           status?: string
@@ -112,6 +115,7 @@ export type Database = {
           id: string
           parent_name: string
           parent_questionnaire: string | null
+          photo_url: string | null
           phone: string | null
           teacher_comment: string | null
           updated_at: string
@@ -125,6 +129,7 @@ export type Database = {
           id?: string
           parent_name: string
           parent_questionnaire?: string | null
+          photo_url?: string | null
           phone?: string | null
           teacher_comment?: string | null
           updated_at?: string
@@ -138,6 +143,7 @@ export type Database = {
           id?: string
           parent_name?: string
           parent_questionnaire?: string | null
+          photo_url?: string | null
           phone?: string | null
           teacher_comment?: string | null
           updated_at?: string

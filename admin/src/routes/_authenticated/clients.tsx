@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -6,9 +6,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ClientCardDialog } from "@/components/ClientCardDialog";
 import { downloadCSV } from "@/lib/csv";
 import { formatDate, formatUAH } from "@/lib/pricing";
-import { Download } from "lucide-react";
+import { Download, ImageIcon } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/clients")({
   head: () => ({ meta: [{ title: "Клієнти — Soloway CRM" }] }),
@@ -17,6 +18,8 @@ export const Route = createFileRoute("/_authenticated/clients")({
 
 function ClientsPage() {
   const [q, setQ] = useState("");
+  const [clientDialogId, setClientDialogId] = useState<string | null>(null);
+  const [clientDialogOpen, setClientDialogOpen] = useState(false);
   const { data } = useQuery({
     queryKey: ["clients-with-stats"],
     queryFn: async () => {
@@ -64,6 +67,11 @@ function ClientsPage() {
     downloadCSV(`clients-${new Date().toISOString().slice(0,10)}.csv`, rows);
   };
 
+  const openClient = (id: string) => {
+    setClientDialogId(id);
+    setClientDialogOpen(true);
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -84,9 +92,10 @@ function ClientsPage() {
         <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Дитина</TableHead>
-                <TableHead>Батьки</TableHead>
+                <TableRow>
+                  <TableHead className="w-[72px]">Фото</TableHead>
+                  <TableHead>Дитина</TableHead>
+                  <TableHead>Батьки</TableHead>
                 <TableHead>Телефон</TableHead>
                 <TableHead className="text-center">Візитів</TableHead>
                 <TableHead className="text-right">Витрачено</TableHead>
@@ -95,12 +104,43 @@ function ClientsPage() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={6} className="py-6 text-center text-muted-foreground">Клієнтів не знайдено</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="py-6 text-center text-muted-foreground">Клієнтів не знайдено</TableCell></TableRow>
               )}
               {filtered.map((c) => (
-                <TableRow key={c.id}>
+                <TableRow
+                  key={c.id}
+                  className="cursor-pointer"
+                  tabIndex={0}
+                  onClick={() => openClient(c.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openClient(c.id);
+                    }
+                  }}
+                >
                   <TableCell>
-                    <Link to="/clients/$id" params={{ id: c.id }} className="font-medium hover:underline">{c.child_name}</Link>
+                    <div className="h-11 w-11 overflow-hidden rounded-md border bg-muted">
+                      {c.photo_url ? (
+                        <img src={c.photo_url} alt={c.child_name} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-muted-foreground">
+                          <ImageIcon className="h-5 w-5" />
+                        </div>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <button
+                      type="button"
+                      className="text-left font-medium hover:underline"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openClient(c.id);
+                      }}
+                    >
+                      {c.child_name}
+                    </button>
                     {c.child_birthdate && (
                       <div className="text-xs text-muted-foreground">нар. {formatDate(c.child_birthdate)}</div>
                     )}
@@ -116,6 +156,12 @@ function ClientsPage() {
           </Table>
         </CardContent>
       </Card>
+
+      <ClientCardDialog
+        open={clientDialogOpen}
+        onOpenChange={setClientDialogOpen}
+        clientId={clientDialogId}
+      />
     </div>
   );
 }

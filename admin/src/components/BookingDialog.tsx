@@ -23,6 +23,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { fetchSettings, type AppSettings } from "@/lib/settings";
 import { calcAmount } from "@/lib/pricing";
+import { PAYMENT_STATUSES } from "@/lib/payment";
+import { Banknote, CircleAlert, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 
 type BookingDraft = {
@@ -38,6 +40,7 @@ type BookingDraft = {
   extra_services: string[];
   amount: string;
   amount_override: boolean;
+  payment_status: string;
   parent_comment: string;
   teacher_comment: string;
   status: string;
@@ -55,6 +58,7 @@ const emptyDraft: BookingDraft = {
   extra_services: [],
   amount: "0",
   amount_override: false,
+  payment_status: "не оплачено",
   parent_comment: "",
   teacher_comment: "",
   status: "Нове",
@@ -148,6 +152,7 @@ export function BookingDialog({
         extra_services: draft.extra_services,
         amount: Number(draft.amount) || 0,
         amount_override: draft.amount_override,
+        payment_status: draft.payment_status,
         parent_comment: draft.parent_comment || null,
         teacher_comment: draft.teacher_comment || null,
         status: draft.status,
@@ -250,6 +255,20 @@ export function BookingDialog({
               </label>
             </div>
           </Field>
+          <Field label="Тип оплати">
+            <Select value={draft.payment_status} onValueChange={(v) => setDraft({ ...draft, payment_status: v })}>
+              <SelectTrigger className={`border ${paymentStyle(draft.payment_status).trigger}`}>
+                <PaymentStatusLabel status={draft.payment_status} />
+              </SelectTrigger>
+              <SelectContent>
+                {PAYMENT_STATUSES.map((status) => (
+                  <SelectItem key={status} value={status}>
+                    <PaymentStatusLabel status={status} />
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
 
           <div className="md:col-span-2">
             <Label className="mb-2 block">Додаткові послуги</Label>
@@ -290,6 +309,42 @@ export function BookingDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function paymentStyle(status?: string | null) {
+  switch (status) {
+    case "оплачено готівкою":
+      return {
+        icon: Banknote,
+        iconClass: "text-emerald-700",
+        trigger: "border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100",
+      };
+    case "оплачено карткою":
+      return {
+        icon: CreditCard,
+        iconClass: "text-sky-700",
+        trigger: "border-sky-200 bg-sky-50 text-sky-900 hover:bg-sky-100",
+      };
+    default:
+      return {
+        icon: CircleAlert,
+        iconClass: "text-amber-700",
+        trigger: "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100",
+      };
+  }
+}
+
+function PaymentStatusLabel({ status }: { status?: string | null }) {
+  const normalized = status || "не оплачено";
+  const style = paymentStyle(normalized);
+  const Icon = style.icon;
+
+  return (
+    <span className="flex min-w-0 items-center gap-2 truncate">
+      <Icon className={`h-4 w-4 shrink-0 ${style.iconClass}`} />
+      <span className="truncate">{normalized}</span>
+    </span>
   );
 }
 
