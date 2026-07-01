@@ -5,6 +5,11 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +23,7 @@ import { fetchSettings, formatLabel } from "@/lib/settings";
 import { formatDate, formatTime, formatUAH } from "@/lib/pricing";
 import { ClientPhotoUpload } from "@/components/ClientPhotoUpload";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
-import { Edit3, ExternalLink, ImageIcon, Save, X } from "lucide-react";
+import { Edit3, ExternalLink, ImageIcon, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
 export function ClientCardDialog({
@@ -106,6 +111,30 @@ export function ClientCardDialog({
       setEditing(false);
       qc.invalidateQueries({ queryKey: ["client", clientId] });
       qc.invalidateQueries({ queryKey: ["clients-with-stats"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async () => {
+      if (!clientId || !client) return;
+      const { data: before } = await supabase.from("clients").select("*").eq("id", clientId).maybeSingle();
+      const { error } = await supabase.from("clients").delete().eq("id", clientId);
+      if (error) throw error;
+      await logActionQuietly({
+        action: "delete",
+        entityType: "client",
+        entityId: clientId,
+        entityLabel: `${client.child_name} · ${client.parent_name}`,
+        summary: `Видалено картку клієнта ${client.child_name}`,
+        before: before ?? client,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Клієнта видалено");
+      onOpenChange(false);
+      qc.invalidateQueries({ queryKey: ["clients-with-stats"] });
+      qc.invalidateQueries({ queryKey: ["bookings"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -215,6 +244,27 @@ export function ClientCardDialog({
         )}
 
         <DialogFooter className="gap-2 sm:gap-2">
+          {client && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="ghost" className="mr-auto text-destructive" disabled={deleteMut.isPending}>
+                  <Trash2 className="mr-1 h-4 w-4" />Видалити
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Видалити клієнта?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Картку {client.child_name} буде видалено. Бронювання залишаться в системі, але без прив'язки до цієї картки.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Скасувати</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => deleteMut.mutate()}>Видалити</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           {clientId && (
             <Button variant="outline" asChild>
               <Link to="/clients/$id" params={{ id: clientId }} onClick={() => onOpenChange(false)}>

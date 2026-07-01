@@ -1,15 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { ClientCardDialog } from "@/components/ClientCardDialog";
 import { downloadCSV } from "@/lib/csv";
 import { formatDate, formatUAH } from "@/lib/pricing";
-import { Download, ImageIcon } from "lucide-react";
+import { logActionQuietly } from "@/lib/audit";
+import { Download, ImageIcon, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/clients")({
   head: () => ({ meta: [{ title: "Клієнти — Soloway CRM" }] }),
@@ -17,6 +24,7 @@ export const Route = createFileRoute("/_authenticated/clients")({
 });
 
 function ClientsPage() {
+  const qc = useQueryClient();
   const [q, setQ] = useState("");
   const [clientDialogId, setClientDialogId] = useState<string | null>(null);
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
@@ -72,6 +80,28 @@ function ClientsPage() {
     setClientDialogOpen(true);
   };
 
+  const deleteMut = useMutation({
+    mutationFn: async (client: ClientWithStats) => {
+      const { data: before } = await supabase.from("clients").select("*").eq("id", client.id).maybeSingle();
+      const { error } = await supabase.from("clients").delete().eq("id", client.id);
+      if (error) throw error;
+      await logActionQuietly({
+        action: "delete",
+        entityType: "client",
+        entityId: client.id,
+        entityLabel: `${client.child_name} · ${client.parent_name}`,
+        summary: `Видалено картку клієнта ${client.child_name}`,
+        before: before ?? client,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Клієнта видалено");
+      qc.invalidateQueries({ queryKey: ["clients-with-stats"] });
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -97,14 +127,15 @@ function ClientsPage() {
                   <TableHead>Дитина</TableHead>
                   <TableHead>Батьки</TableHead>
                 <TableHead>Телефон</TableHead>
-                <TableHead className="text-center">Візитів</TableHead>
-                <TableHead className="text-right">Витрачено</TableHead>
-                <TableHead>Останній візит</TableHead>
+                  <TableHead className="text-center">Візитів</TableHead>
+                  <TableHead className="text-right">Витрачено</TableHead>
+                  <TableHead>Останній візит</TableHead>
+                  <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={7} className="py-6 text-center text-muted-foreground">Клієнтів не знайдено</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="py-6 text-center text-muted-foreground">Клієнтів не знайдено</TableCell></TableRow>
               )}
               {filtered.map((c) => (
                 <TableRow
@@ -150,6 +181,32 @@ function ClientsPage() {
                   <TableCell className="text-center">{c.stats.count}</TableCell>
                   <TableCell className="text-right font-semibold">{formatUAH(c.stats.total)}</TableCell>
                   <TableCell>{c.stats.last ? formatDate(c.stats.last) : "—"}</TableCell>
+                  <TableCell className="text-right">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={(event) => event.stopPropagation()}
+                          disabled={deleteMut.isPending}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent onClick={(event) => event.stopPropagation()}>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Видалити клієнта?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Картку {c.child_name} буде видалено. Бронювання залишаться в системі, але без прив'язки до цієї картки.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Скасувати</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => deleteMut.mutate(c)}>Видалити</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -165,3 +222,18 @@ function ClientsPage() {
     </div>
   );
 }
+
+type ClientWithStats = {
+  id: string;
+  parent_name: string;
+  child_name: string;
+  phone: string | null;
+  photo_url: string | null;
+  child_birthdate: string | null;
+  stats: {
+    count: number;
+    total: number;
+    first?: string;
+    last?: string;
+  };
+};
