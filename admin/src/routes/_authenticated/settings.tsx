@@ -49,7 +49,7 @@ function SettingsPage() {
     mutationFn: downloadDatabaseBackupCsv,
     onSuccess: (counts) => {
       toast.success(
-        `CSV бекап готовий: ${counts.clients} клієнтів, ${counts.bookings} бронювань, ${counts.audit_logs} дій`,
+        `CSV ZIP завантажено: ${counts.clients} клієнтів, ${counts.bookings} бронювань, ${counts.audit_logs} дій`,
       );
     },
     onError: (e: Error) => toast.error(e.message),
@@ -59,7 +59,7 @@ function SettingsPage() {
     mutationFn: downloadDatabaseBackupSql,
     onSuccess: (counts) => {
       toast.success(
-        `Supabase SQL бекап готовий: ${counts.clients} клієнтів, ${counts.bookings} бронювань, ${counts.audit_logs} дій`,
+        `Supabase SQL завантажено: ${counts.clients} клієнтів, ${counts.bookings} бронювань, ${counts.audit_logs} дій`,
       );
     },
     onError: (e: Error) => toast.error(e.message),
@@ -127,7 +127,7 @@ function SettingsPage() {
               disabled={csvBackupMut.isPending || sqlBackupMut.isPending}
             >
               <Download className="mr-1 h-4 w-4" />
-              {csvBackupMut.isPending ? "Створення..." : "CSV бекап"}
+              {csvBackupMut.isPending ? "Створення..." : "CSV ZIP"}
             </Button>
             <Button
               variant="outline"

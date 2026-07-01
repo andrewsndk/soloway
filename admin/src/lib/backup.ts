@@ -74,31 +74,14 @@ export async function downloadDatabaseBackupCsv(): Promise<BackupCounts> {
   const instructions = instructionsRows(data.app_settings);
   const stamp = backupStamp();
 
-  downloadTextFile(
-    `soloway-backup-${stamp}-clients.csv`,
-    toCsv(CLIENT_COLUMNS, data.clients),
-    "text/csv;charset=utf-8;",
-  );
-  downloadTextFile(
-    `soloway-backup-${stamp}-bookings.csv`,
-    toCsv(BOOKING_COLUMNS, data.bookings),
-    "text/csv;charset=utf-8;",
-  );
-  downloadTextFile(
-    `soloway-backup-${stamp}-instructions.csv`,
-    toCsv(["section", "title", "text"], instructions),
-    "text/csv;charset=utf-8;",
-  );
-  downloadTextFile(
-    `soloway-backup-${stamp}-audit_logs.csv`,
-    toCsv(AUDIT_COLUMNS, data.audit_logs),
-    "text/csv;charset=utf-8;",
-  );
-  downloadTextFile(
-    `soloway-backup-${stamp}-app_settings.csv`,
-    toCsv(SETTINGS_COLUMNS, data.app_settings),
-    "text/csv;charset=utf-8;",
-  );
+  const zip = createZip([
+    { name: "clients.csv", content: toCsv(CLIENT_COLUMNS, data.clients) },
+    { name: "bookings.csv", content: toCsv(BOOKING_COLUMNS, data.bookings) },
+    { name: "instructions.csv", content: toCsv(["section", "title", "text"], instructions) },
+    { name: "audit_logs.csv", content: toCsv(AUDIT_COLUMNS, data.audit_logs) },
+    { name: "app_settings.csv", content: toCsv(SETTINGS_COLUMNS, data.app_settings) },
+  ]);
+  downloadBlob(`soloway-backup-${stamp}-csv.zip`, new Blob([zip], { type: "application/zip" }));
 
   return counts(data, instructions.length);
 }
@@ -240,6 +223,10 @@ function counts(data: BackupData, instructions: number): BackupCounts {
 
 function downloadTextFile(filename: string, content: string, type: string) {
   const blob = new Blob([content], { type });
+  downloadBlob(filename, blob);
+}
+
+function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -252,4 +239,125 @@ function downloadTextFile(filename: string, content: string, type: string) {
 
 function backupStamp() {
   return new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+}
+
+type ZipInputFile = {
+  name: string;
+  content: string;
+};
+
+function createZip(files: ZipInputFile[]) {
+  const encoder = new TextEncoder();
+  const localParts: Uint8Array[] = [];
+  const centralParts: Uint8Array[] = [];
+  let offset = 0;
+  const date = new Date();
+  const dosTimeValue = dosTime(date);
+  const dosDateValue = dosDate(date);
+
+  files.forEach((file) => {
+    const nameBytes = encoder.encode(file.name);
+    const data = encoder.encode(file.content);
+    const crc = crc32(data);
+
+    const localHeader = new Uint8Array(30 + nameBytes.length);
+    const localView = new DataView(localHeader.buffer);
+    localView.setUint32(0, 0x04034b50, true);
+    localView.setUint16(4, 20, true);
+    localView.setUint16(6, 0x0800, true);
+    localView.setUint16(8, 0, true);
+    localView.setUint16(10, dosTimeValue, true);
+    localView.setUint16(12, dosDateValue, true);
+    localView.setUint32(14, crc, true);
+    localView.setUint32(18, data.length, true);
+    localView.setUint32(22, data.length, true);
+    localView.setUint16(26, nameBytes.length, true);
+    localView.setUint16(28, 0, true);
+    localHeader.set(nameBytes, 30);
+
+    const centralHeader = new Uint8Array(46 + nameBytes.length);
+    const centralView = new DataView(centralHeader.buffer);
+    centralView.setUint32(0, 0x02014b50, true);
+    centralView.setUint16(4, 20, true);
+    centralView.setUint16(6, 20, true);
+    centralView.setUint16(8, 0x0800, true);
+    centralView.setUint16(10, 0, true);
+    centralView.setUint16(12, dosTimeValue, true);
+    centralView.setUint16(14, dosDateValue, true);
+    centralView.setUint32(16, crc, true);
+    centralView.setUint32(20, data.length, true);
+    centralView.setUint32(24, data.length, true);
+    centralView.setUint16(28, nameBytes.length, true);
+    centralView.setUint16(30, 0, true);
+    centralView.setUint16(32, 0, true);
+    centralView.setUint16(34, 0, true);
+    centralView.setUint16(36, 0, true);
+    centralView.setUint32(38, 0, true);
+    centralView.setUint32(42, offset, true);
+    centralHeader.set(nameBytes, 46);
+
+    localParts.push(localHeader, data);
+    centralParts.push(centralHeader);
+    offset += localHeader.length + data.length;
+  });
+
+  const centralOffset = offset;
+  const centralSize = centralParts.reduce((sum, part) => sum + part.length, 0);
+  const endRecord = new Uint8Array(22);
+  const endView = new DataView(endRecord.buffer);
+  endView.setUint32(0, 0x06054b50, true);
+  endView.setUint16(4, 0, true);
+  endView.setUint16(6, 0, true);
+  endView.setUint16(8, files.length, true);
+  endView.setUint16(10, files.length, true);
+  endView.setUint32(12, centralSize, true);
+  endView.setUint32(16, centralOffset, true);
+  endView.setUint16(20, 0, true);
+
+  return concatBytes([...localParts, ...centralParts, endRecord]);
+}
+
+function concatBytes(parts: Uint8Array[]) {
+  const total = parts.reduce((sum, part) => sum + part.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  parts.forEach((part) => {
+    out.set(part, offset);
+    offset += part.length;
+  });
+  return out;
+}
+
+let crcTable: Uint32Array | null = null;
+
+function crc32(data: Uint8Array) {
+  const table = getCrcTable();
+  let crc = 0xffffffff;
+  data.forEach((byte) => {
+    crc = (crc >>> 8) ^ table[(crc ^ byte) & 0xff];
+  });
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function getCrcTable() {
+  if (crcTable) return crcTable;
+
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i += 1) {
+    let value = i;
+    for (let bit = 0; bit < 8; bit += 1) {
+      value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    table[i] = value >>> 0;
+  }
+  crcTable = table;
+  return table;
+}
+
+function dosTime(date: Date) {
+  return (date.getHours() << 11) | (date.getMinutes() << 5) | Math.floor(date.getSeconds() / 2);
+}
+
+function dosDate(date: Date) {
+  return ((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate();
 }
