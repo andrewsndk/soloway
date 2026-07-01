@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ClientPhotoUpload } from "@/components/ClientPhotoUpload";
 import { fetchSettings, formatLabel } from "@/lib/settings";
-import { actualStayMinutes, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
+import { actualStayMinutes, bookingStartDateTime, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
 import { ArrowLeft, Edit3, ImageIcon, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -250,27 +250,50 @@ function ClientPage() {
                 <TableRow><TableCell colSpan={8} className="py-6 text-center text-muted-foreground">Поки що немає візитів</TableCell></TableRow>
               )}
               {(bookings ?? []).map((b) => (
-                <TableRow key={b.id}>
-                  <TableCell>{formatDate(b.visit_date)}</TableCell>
-                  <TableCell>{formatTime(b.visit_time)}</TableCell>
-                  <TableCell className="text-xs">
-                    <div>{formatDateTime(b.check_in_at)} → {formatDateTime(b.check_out_at)}</div>
-                    <div className="text-muted-foreground">{formatDuration(actualStayMinutes(b.check_in_at, b.check_out_at))}</div>
-                  </TableCell>
-                  <TableCell>{settings ? formatLabel(settings.formats, b.format) : b.format}</TableCell>
-                  <TableCell>{b.hours ?? "—"}</TableCell>
-                  <TableCell className="text-right">{formatUAH(b.amount)}</TableCell>
-                  <TableCell><Badge variant={b.status === "Скасовано" ? "destructive" : "secondary"}>{b.status}</Badge></TableCell>
-                  <TableCell className="min-w-[260px] whitespace-pre-wrap text-sm">
-                    {b.teacher_comment || "—"}
-                  </TableCell>
-                </TableRow>
+                <VisitHistoryRow key={b.id} booking={b} settings={settings} />
               ))}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function VisitHistoryRow({
+  booking,
+  settings,
+}: {
+  booking: {
+    visit_date: string;
+    visit_time: string | null;
+    check_in_at: string | null;
+    check_out_at: string | null;
+    format: string;
+    hours: number | null;
+    amount: number;
+    status: string;
+    teacher_comment: string | null;
+  };
+  settings?: Awaited<ReturnType<typeof fetchSettings>>;
+}) {
+  const checkInAt = booking.check_in_at ?? bookingStartDateTime(booking.visit_date, booking.visit_time);
+  return (
+    <TableRow>
+      <TableCell>{formatDate(booking.visit_date)}</TableCell>
+      <TableCell>{formatTime(booking.visit_time)}</TableCell>
+      <TableCell className="text-xs">
+        <div>{formatDateTime(checkInAt)} → {formatDateTime(booking.check_out_at)}</div>
+        <div className="text-muted-foreground">{formatDuration(actualStayMinutes(checkInAt, booking.check_out_at))}</div>
+      </TableCell>
+      <TableCell>{settings ? formatLabel(settings.formats, booking.format) : booking.format}</TableCell>
+      <TableCell>{booking.hours ?? "—"}</TableCell>
+      <TableCell className="text-right">{formatUAH(booking.amount)}</TableCell>
+      <TableCell><Badge variant={booking.status === "Скасовано" ? "destructive" : "secondary"}>{booking.status}</Badge></TableCell>
+      <TableCell className="min-w-[260px] whitespace-pre-wrap text-sm">
+        {booking.teacher_comment || "—"}
+      </TableCell>
+    </TableRow>
   );
 }
 

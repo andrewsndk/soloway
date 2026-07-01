@@ -34,6 +34,14 @@ export function actualStayMinutes(checkInAt?: string | null, checkOutAt?: string
   return Math.round((end - start) / 60000);
 }
 
+export function bookingStartDateTime(visitDate?: string | null, visitTime?: string | null): string | null {
+  if (!visitDate) return null;
+  const time = visitTime ? visitTime.slice(0, 5) : "00:00";
+  const date = new Date(`${visitDate}T${time}:00`);
+  if (isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
 export function formatDuration(minutes: number | null | undefined): string {
   if (!minutes || minutes <= 0) return "—";
   const h = Math.floor(minutes / 60);

@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Json, Tables } from "@/integrations/supabase/types";
+import { bookingStartDateTime } from "@/lib/pricing";
 import { DEFAULT_SETTINGS, type AppSettings } from "@/lib/settings";
 
 type ClientRow = Tables<"clients">;
@@ -137,7 +138,7 @@ export async function downloadAccountantPeriodCsv({
   const rows = (bookings ?? []).map((booking) => ({
     date: booking.visit_date,
     time: booking.visit_time?.slice(0, 5) ?? "",
-    check_in_at: booking.check_in_at ?? "",
+    check_in_at: booking.check_in_at ?? bookingStartDateTime(booking.visit_date, booking.visit_time) ?? "",
     check_out_at: booking.check_out_at ?? "",
     child_name: booking.child_name,
     parent_name: booking.parent_name,

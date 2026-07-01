@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { BookingDialog } from "@/components/BookingDialog";
 import { ClientCardDialog } from "@/components/ClientCardDialog";
 import { PAYMENT_STATUSES } from "@/lib/payment";
-import { actualStayMinutes, calcActualAmountByTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
+import { actualStayMinutes, bookingStartDateTime, calcActualAmountByTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
 import { formatLabel, fetchSettings } from "@/lib/settings";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
 import {
@@ -221,9 +221,10 @@ function DashboardPage() {
   });
 
   const checkMut = useMutation({
-    mutationFn: async ({ booking, type }: { booking: BookingRow; type: "in" | "out" }) => {
+    mutationFn: async ({ booking }: { booking: BookingRow }) => {
       const now = new Date().toISOString();
-      const payload = type === "in" ? { check_in_at: now } : { check_out_at: now };
+      const checkInAt = booking.check_in_at ?? bookingStartDateTime(booking.visit_date, booking.visit_time) ?? now;
+      const payload = { check_in_at: checkInAt, check_out_at: now };
       const { data: before } = await supabase.from("bookings").select("*").eq("id", booking.id).maybeSingle();
       const { data: updated, error } = await supabase
         .from("bookings")
@@ -237,9 +238,7 @@ function DashboardPage() {
         entityType: "booking",
         entityId: booking.id,
         entityLabel: `${updated.child_name} · ${updated.visit_date}`,
-        summary: type === "in"
-          ? `Відмічено прихід дитини ${updated.child_name}`
-          : `Відмічено вихід дитини ${updated.child_name}`,
+        summary: `Відмічено вихід дитини ${updated.child_name}`,
         before: before ? compactDiff(before, updated) : null,
         after: updated,
       });
@@ -319,7 +318,7 @@ function DashboardPage() {
                     checkPending={checkMut.isPending}
                     onPaymentChange={(payment_status) => paymentMut.mutate({ booking, payment_status })}
                     onStatusChange={(status) => changeStatus(booking, status)}
-                    onCheck={(type) => checkMut.mutate({ booking, type })}
+                    onCheck={() => checkMut.mutate({ booking })}
                     onOpenClient={() => openClient(booking.client_id)}
                   />
                 ))}
@@ -536,12 +535,13 @@ function BookingWorkRow({
   checkPending: boolean;
   onPaymentChange: (value: string) => void;
   onStatusChange: (value: string) => void;
-  onCheck: (type: "in" | "out") => void;
+  onCheck: () => void;
   onOpenClient: () => void;
 }) {
-  const minutes = actualStayMinutes(booking.check_in_at, booking.check_out_at);
-  const extraDue = settings ? calcExtraDue(booking.amount, booking.format, booking.check_in_at, booking.check_out_at, settings) : 0;
-  const actualAmount = settings ? calcActualAmountByTime(booking.format, booking.check_in_at, booking.check_out_at, settings) : null;
+  const checkInAt = booking.check_in_at ?? bookingStartDateTime(booking.visit_date, booking.visit_time);
+  const minutes = actualStayMinutes(checkInAt, booking.check_out_at);
+  const extraDue = settings ? calcExtraDue(booking.amount, booking.format, checkInAt, booking.check_out_at, settings) : 0;
+  const actualAmount = settings ? calcActualAmountByTime(booking.format, checkInAt, booking.check_out_at, settings) : null;
 
   return (
     <div className="rounded-md border p-3">
@@ -558,6 +558,7 @@ function BookingWorkRow({
         <CheckInOutControls
           booking={booking}
           pending={checkPending}
+          checkInAt={checkInAt}
           minutes={minutes}
           extraDue={extraDue}
           actualAmount={actualAmount}
@@ -573,6 +574,7 @@ function BookingWorkRow({
 function CheckInOutControls({
   booking,
   pending,
+  checkInAt,
   minutes,
   extraDue,
   actualAmount,
@@ -580,17 +582,18 @@ function CheckInOutControls({
 }: {
   booking: BookingRow;
   pending: boolean;
+  checkInAt: string | null;
   minutes: number | null;
   extraDue: number;
   actualAmount: number | null;
-  onCheck: (type: "in" | "out") => void;
+  onCheck: () => void;
 }) {
   return (
     <div className="space-y-2 rounded-md bg-muted/40 p-2">
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div>
           <div className="text-muted-foreground">Прийшла</div>
-          <div className="font-medium">{formatDateTime(booking.check_in_at)}</div>
+          <div className="font-medium">{formatDateTime(checkInAt)}</div>
         </div>
         <div>
           <div className="text-muted-foreground">Пішла</div>
@@ -598,17 +601,12 @@ function CheckInOutControls({
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        {!booking.check_in_at && (
-          <Button size="sm" variant="outline" onClick={() => onCheck("in")} disabled={pending}>
-            Чек-ін
-          </Button>
-        )}
-        {booking.check_in_at && !booking.check_out_at && (
-          <Button size="sm" variant="outline" onClick={() => onCheck("out")} disabled={pending}>
+        {!booking.check_out_at && (
+          <Button size="sm" variant="outline" onClick={onCheck} disabled={pending}>
             Чек-аут
           </Button>
         )}
-        {booking.check_in_at && booking.check_out_at && (
+        {checkInAt && booking.check_out_at && (
           <Badge variant="secondary">{formatDuration(minutes)}</Badge>
         )}
         {extraDue > 0 && (

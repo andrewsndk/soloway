@@ -24,7 +24,7 @@ import {
 import { BookingDialog } from "@/components/BookingDialog";
 import { ClientCardDialog } from "@/components/ClientCardDialog";
 import { fetchSettings, formatLabel } from "@/lib/settings";
-import { actualStayMinutes, calcActualAmountByTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
+import { actualStayMinutes, bookingStartDateTime, calcActualAmountByTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
 import { PAYMENT_STATUSES } from "@/lib/payment";
 import { downloadCSV } from "@/lib/csv";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
@@ -174,9 +174,10 @@ function BookingsPage() {
   });
 
   const checkMut = useMutation({
-    mutationFn: async ({ booking, type }: { booking: BookingRow; type: "in" | "out" }) => {
+    mutationFn: async ({ booking }: { booking: BookingRow }) => {
       const now = new Date().toISOString();
-      const payload = type === "in" ? { check_in_at: now } : { check_out_at: now };
+      const checkInAt = booking.check_in_at ?? bookingStartDateTime(booking.visit_date, booking.visit_time) ?? now;
+      const payload = { check_in_at: checkInAt, check_out_at: now };
       const { data: before } = await supabase.from("bookings").select("*").eq("id", booking.id).maybeSingle();
       const { data: updated, error } = await supabase.from("bookings").update(payload).eq("id", booking.id).select("*").single();
       if (error) throw error;
@@ -185,9 +186,7 @@ function BookingsPage() {
         entityType: "booking",
         entityId: booking.id,
         entityLabel: `${updated.child_name} · ${updated.visit_date}`,
-        summary: type === "in"
-          ? `Відмічено прихід дитини ${updated.child_name}`
-          : `Відмічено вихід дитини ${updated.child_name}`,
+        summary: `Відмічено вихід дитини ${updated.child_name}`,
         before: before ? compactDiff(before, updated) : null,
         after: updated,
       });
@@ -224,10 +223,10 @@ function BookingsPage() {
       Сума: b.amount,
       Оплата: b.payment_status,
       Статус: b.status,
-      "Чек-ін": b.check_in_at ?? "",
+      "Чек-ін": b.check_in_at ?? bookingStartDateTime(b.visit_date, b.visit_time) ?? "",
       "Чек-аут": b.check_out_at ?? "",
-      "Фактичний час": formatDuration(actualStayMinutes(b.check_in_at, b.check_out_at)),
-      "Доплата": settings ? calcExtraDue(b.amount, b.format, b.check_in_at, b.check_out_at, settings) : 0,
+      "Фактичний час": formatDuration(actualStayMinutes(b.check_in_at ?? bookingStartDateTime(b.visit_date, b.visit_time), b.check_out_at)),
+      "Доплата": settings ? calcExtraDue(b.amount, b.format, b.check_in_at ?? bookingStartDateTime(b.visit_date, b.visit_time), b.check_out_at, settings) : 0,
     }));
     downloadCSV(`bookings-${new Date().toISOString().slice(0,10)}.csv`, rows);
   };
@@ -324,7 +323,7 @@ function BookingsPage() {
                       booking={b}
                       settings={settings}
                       pending={checkMut.isPending}
-                      onCheck={(type) => checkMut.mutate({ booking: b, type })}
+                      onCheck={() => checkMut.mutate({ booking: b })}
                     />
                   </TableCell>
                   <TableCell className="text-sm">
@@ -534,30 +533,26 @@ function CheckVisitCell({
   booking: BookingRow;
   settings?: Awaited<ReturnType<typeof fetchSettings>>;
   pending: boolean;
-  onCheck: (type: "in" | "out") => void;
+  onCheck: () => void;
 }) {
-  const minutes = actualStayMinutes(booking.check_in_at, booking.check_out_at);
-  const extraDue = settings ? calcExtraDue(booking.amount, booking.format, booking.check_in_at, booking.check_out_at, settings) : 0;
-  const actualAmount = settings ? calcActualAmountByTime(booking.format, booking.check_in_at, booking.check_out_at, settings) : null;
+  const checkInAt = booking.check_in_at ?? bookingStartDateTime(booking.visit_date, booking.visit_time);
+  const minutes = actualStayMinutes(checkInAt, booking.check_out_at);
+  const extraDue = settings ? calcExtraDue(booking.amount, booking.format, checkInAt, booking.check_out_at, settings) : 0;
+  const actualAmount = settings ? calcActualAmountByTime(booking.format, checkInAt, booking.check_out_at, settings) : null;
 
   return (
     <div className="min-w-[190px] space-y-1.5 text-xs">
       <div className="grid grid-cols-2 gap-1 text-muted-foreground">
-        <span>Вхід: <b className="font-medium text-foreground">{formatDateTime(booking.check_in_at)}</b></span>
+        <span>Вхід: <b className="font-medium text-foreground">{formatDateTime(checkInAt)}</b></span>
         <span>Вихід: <b className="font-medium text-foreground">{formatDateTime(booking.check_out_at)}</b></span>
       </div>
       <div className="flex flex-wrap items-center gap-1">
-        {!booking.check_in_at && (
-          <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => onCheck("in")} disabled={pending}>
-            Чек-ін
-          </Button>
-        )}
-        {booking.check_in_at && !booking.check_out_at && (
-          <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => onCheck("out")} disabled={pending}>
+        {!booking.check_out_at && (
+          <Button size="sm" variant="outline" className="h-7 px-2" onClick={onCheck} disabled={pending}>
             Чек-аут
           </Button>
         )}
-        {booking.check_in_at && booking.check_out_at && (
+        {checkInAt && booking.check_out_at && (
           <Badge variant="secondary">{formatDuration(minutes)}</Badge>
         )}
         {extraDue > 0 ? (
