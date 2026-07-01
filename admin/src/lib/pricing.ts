@@ -26,6 +26,52 @@ export function calcAmount(
   }
 }
 
+export function actualStayMinutes(checkInAt?: string | null, checkOutAt?: string | null): number | null {
+  if (!checkInAt || !checkOutAt) return null;
+  const start = new Date(checkInAt).getTime();
+  const end = new Date(checkOutAt).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  return Math.round((end - start) / 60000);
+}
+
+export function formatDuration(minutes: number | null | undefined): string {
+  if (!minutes || minutes <= 0) return "—";
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m} хв`;
+  if (m === 0) return `${h} год`;
+  return `${h} год ${m} хв`;
+}
+
+export function calcActualAmountByTime(
+  format: string,
+  checkInAt: string | null | undefined,
+  checkOutAt: string | null | undefined,
+  settings: AppSettings,
+): number | null {
+  const minutes = actualStayMinutes(checkInAt, checkOutAt);
+  if (!minutes) return null;
+  if (format === "full_day") return settings.tariffs.full_day;
+
+  const billedHours = Math.max(1, Math.ceil(minutes / 60));
+  if (format === "adaptation") {
+    return Math.max(settings.tariffs.adaptation, calcAmount("other", billedHours, settings));
+  }
+  return calcAmount("other", billedHours, settings);
+}
+
+export function calcExtraDue(
+  currentAmount: number | null | undefined,
+  format: string,
+  checkInAt: string | null | undefined,
+  checkOutAt: string | null | undefined,
+  settings: AppSettings,
+): number {
+  const actualAmount = calcActualAmountByTime(format, checkInAt, checkOutAt, settings);
+  if (actualAmount == null) return 0;
+  return Math.max(0, actualAmount - Number(currentAmount ?? 0));
+}
+
 export function formatUAH(n: number | null | undefined): string {
   const v = Number(n ?? 0);
   return `${v.toLocaleString("uk-UA")} ₴`;
@@ -41,4 +87,16 @@ export function formatDate(d: string | null | undefined): string {
 export function formatTime(t: string | null | undefined): string {
   if (!t) return "";
   return t.slice(0, 5);
+}
+
+export function formatDateTime(t: string | null | undefined): string {
+  if (!t) return "—";
+  const date = new Date(t);
+  if (isNaN(date.getTime())) return t;
+  return date.toLocaleString("uk-UA", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

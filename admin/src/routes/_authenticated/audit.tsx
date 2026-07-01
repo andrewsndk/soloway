@@ -39,6 +39,8 @@ const FIELD_LABELS: Record<string, string> = {
   admin_comment: "Коментар адміна",
   amount: "Сума",
   amount_override: "Сума вручну",
+  check_in_at: "Чек-ін",
+  check_out_at: "Чек-аут",
   child_birthdate: "Дата народження дитини",
   child_name: "Ім'я дитини",
   client_id: "Клієнт",

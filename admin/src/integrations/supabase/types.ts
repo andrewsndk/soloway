@@ -81,6 +81,8 @@ export type Database = {
         Row: {
           amount: number
           amount_override: boolean
+          check_in_at: string | null
+          check_out_at: string | null
           child_name: string
           client_id: string | null
           created_at: string
@@ -102,6 +104,8 @@ export type Database = {
         Insert: {
           amount?: number
           amount_override?: boolean
+          check_in_at?: string | null
+          check_out_at?: string | null
           child_name: string
           client_id?: string | null
           created_at?: string
@@ -123,6 +127,8 @@ export type Database = {
         Update: {
           amount?: number
           amount_override?: boolean
+          check_in_at?: string | null
+          check_out_at?: string | null
           child_name?: string
           client_id?: string | null
           created_at?: string

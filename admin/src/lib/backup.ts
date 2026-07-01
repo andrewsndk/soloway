@@ -41,6 +41,8 @@ const BOOKING_COLUMNS: Array<keyof BookingRow> = [
   "hours",
   "visit_date",
   "visit_time",
+  "check_in_at",
+  "check_out_at",
   "source",
   "extra_services",
   "amount",
@@ -135,6 +137,8 @@ export async function downloadAccountantPeriodCsv({
   const rows = (bookings ?? []).map((booking) => ({
     date: booking.visit_date,
     time: booking.visit_time?.slice(0, 5) ?? "",
+    check_in_at: booking.check_in_at ?? "",
+    check_out_at: booking.check_out_at ?? "",
     child_name: booking.child_name,
     parent_name: booking.parent_name,
     phone: booking.phone ?? "",
@@ -160,6 +164,8 @@ export async function downloadAccountantPeriodCsv({
     [
       "Дата",
       "Час",
+      "Чек-ін",
+      "Чек-аут",
       "Дитина",
       "Батьки",
       "Телефон",
@@ -176,6 +182,8 @@ export async function downloadAccountantPeriodCsv({
     rows.map((row) => ({
       Дата: row.date,
       Час: row.time,
+      "Чек-ін": row.check_in_at,
+      "Чек-аут": row.check_out_at,
       Дитина: row.child_name,
       Батьки: row.parent_name,
       Телефон: row.phone,

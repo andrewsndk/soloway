@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ClientPhotoUpload } from "@/components/ClientPhotoUpload";
 import { fetchSettings, formatLabel } from "@/lib/settings";
-import { formatDate, formatTime, formatUAH } from "@/lib/pricing";
+import { actualStayMinutes, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
 import { ArrowLeft, Edit3, ImageIcon, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -237,6 +237,7 @@ function ClientPage() {
               <TableRow>
                 <TableHead>Дата</TableHead>
                 <TableHead>Час</TableHead>
+                <TableHead>Факт</TableHead>
                 <TableHead>Формат</TableHead>
                 <TableHead>Годин</TableHead>
                 <TableHead className="text-right">Сума</TableHead>
@@ -246,12 +247,16 @@ function ClientPage() {
             </TableHeader>
             <TableBody>
               {(bookings ?? []).length === 0 && (
-                <TableRow><TableCell colSpan={7} className="py-6 text-center text-muted-foreground">Поки що немає візитів</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="py-6 text-center text-muted-foreground">Поки що немає візитів</TableCell></TableRow>
               )}
               {(bookings ?? []).map((b) => (
                 <TableRow key={b.id}>
                   <TableCell>{formatDate(b.visit_date)}</TableCell>
                   <TableCell>{formatTime(b.visit_time)}</TableCell>
+                  <TableCell className="text-xs">
+                    <div>{formatDateTime(b.check_in_at)} → {formatDateTime(b.check_out_at)}</div>
+                    <div className="text-muted-foreground">{formatDuration(actualStayMinutes(b.check_in_at, b.check_out_at))}</div>
+                  </TableCell>
                   <TableCell>{settings ? formatLabel(settings.formats, b.format) : b.format}</TableCell>
                   <TableCell>{b.hours ?? "—"}</TableCell>
                   <TableCell className="text-right">{formatUAH(b.amount)}</TableCell>

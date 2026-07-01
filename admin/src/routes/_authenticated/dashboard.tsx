@@ -18,7 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { BookingDialog } from "@/components/BookingDialog";
 import { ClientCardDialog } from "@/components/ClientCardDialog";
 import { PAYMENT_STATUSES } from "@/lib/payment";
-import { formatDate, formatTime, formatUAH } from "@/lib/pricing";
+import { actualStayMinutes, calcActualAmountByTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
 import { formatLabel, fetchSettings } from "@/lib/settings";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
 import {
@@ -220,6 +220,39 @@ function DashboardPage() {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const checkMut = useMutation({
+    mutationFn: async ({ booking, type }: { booking: BookingRow; type: "in" | "out" }) => {
+      const now = new Date().toISOString();
+      const payload = type === "in" ? { check_in_at: now } : { check_out_at: now };
+      const { data: before } = await supabase.from("bookings").select("*").eq("id", booking.id).maybeSingle();
+      const { data: updated, error } = await supabase
+        .from("bookings")
+        .update(payload)
+        .eq("id", booking.id)
+        .select("*")
+        .single();
+      if (error) throw error;
+      await logActionQuietly({
+        action: "update",
+        entityType: "booking",
+        entityId: booking.id,
+        entityLabel: `${updated.child_name} · ${updated.visit_date}`,
+        summary: type === "in"
+          ? `Відмічено прихід дитини ${updated.child_name}`
+          : `Відмічено вихід дитини ${updated.child_name}`,
+        before: before ? compactDiff(before, updated) : null,
+        after: updated,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Час візиту оновлено");
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      qc.invalidateQueries({ queryKey: ["client-bookings"] });
+      qc.invalidateQueries({ queryKey: ["audit-logs-dashboard"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   const changeStatus = (booking: BookingRow, status: string) => {
     if (status === booking.status) return;
     if (status === "Завершено" && !booking.teacher_comment?.trim()) {
@@ -283,8 +316,10 @@ function DashboardPage() {
                     settings={settings}
                     paymentPending={paymentMut.isPending}
                     statusPending={statusMut.isPending}
+                    checkPending={checkMut.isPending}
                     onPaymentChange={(payment_status) => paymentMut.mutate({ booking, payment_status })}
                     onStatusChange={(status) => changeStatus(booking, status)}
+                    onCheck={(type) => checkMut.mutate({ booking, type })}
                     onOpenClient={() => openClient(booking.client_id)}
                   />
                 ))}
@@ -475,6 +510,8 @@ type BookingRow = {
   extra_services: string[];
   amount: number;
   amount_override: boolean;
+  check_in_at: string | null;
+  check_out_at: string | null;
   payment_status: string;
   parent_comment: string | null;
   teacher_comment: string | null;
@@ -486,21 +523,29 @@ function BookingWorkRow({
   settings,
   paymentPending,
   statusPending,
+  checkPending,
   onPaymentChange,
   onStatusChange,
+  onCheck,
   onOpenClient,
 }: {
   booking: BookingRow;
   settings?: Awaited<ReturnType<typeof fetchSettings>>;
   paymentPending: boolean;
   statusPending: boolean;
+  checkPending: boolean;
   onPaymentChange: (value: string) => void;
   onStatusChange: (value: string) => void;
+  onCheck: (type: "in" | "out") => void;
   onOpenClient: () => void;
 }) {
+  const minutes = actualStayMinutes(booking.check_in_at, booking.check_out_at);
+  const extraDue = settings ? calcExtraDue(booking.amount, booking.format, booking.check_in_at, booking.check_out_at, settings) : 0;
+  const actualAmount = settings ? calcActualAmountByTime(booking.format, booking.check_in_at, booking.check_out_at, settings) : null;
+
   return (
     <div className="rounded-md border p-3">
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_190px_160px] lg:items-center">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_260px_190px_160px] xl:items-center">
         <div>
           <button type="button" onClick={onOpenClient} className="text-left font-semibold hover:underline">
             {formatTime(booking.visit_time)} · {booking.child_name}
@@ -510,8 +555,68 @@ function BookingWorkRow({
           </div>
           <div className="mt-1 text-sm font-medium">{formatUAH(booking.amount)}</div>
         </div>
+        <CheckInOutControls
+          booking={booking}
+          pending={checkPending}
+          minutes={minutes}
+          extraDue={extraDue}
+          actualAmount={actualAmount}
+          onCheck={onCheck}
+        />
         <PaymentSelect booking={booking} pending={paymentPending} onChange={onPaymentChange} />
         <StatusSelect booking={booking} settings={settings} pending={statusPending} onChange={onStatusChange} />
+      </div>
+    </div>
+  );
+}
+
+function CheckInOutControls({
+  booking,
+  pending,
+  minutes,
+  extraDue,
+  actualAmount,
+  onCheck,
+}: {
+  booking: BookingRow;
+  pending: boolean;
+  minutes: number | null;
+  extraDue: number;
+  actualAmount: number | null;
+  onCheck: (type: "in" | "out") => void;
+}) {
+  return (
+    <div className="space-y-2 rounded-md bg-muted/40 p-2">
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <div className="text-muted-foreground">Прийшла</div>
+          <div className="font-medium">{formatDateTime(booking.check_in_at)}</div>
+        </div>
+        <div>
+          <div className="text-muted-foreground">Пішла</div>
+          <div className="font-medium">{formatDateTime(booking.check_out_at)}</div>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {!booking.check_in_at && (
+          <Button size="sm" variant="outline" onClick={() => onCheck("in")} disabled={pending}>
+            Чек-ін
+          </Button>
+        )}
+        {booking.check_in_at && !booking.check_out_at && (
+          <Button size="sm" variant="outline" onClick={() => onCheck("out")} disabled={pending}>
+            Чек-аут
+          </Button>
+        )}
+        {booking.check_in_at && booking.check_out_at && (
+          <Badge variant="secondary">{formatDuration(minutes)}</Badge>
+        )}
+        {extraDue > 0 && (
+          <Badge variant="destructive">Доплата {formatUAH(extraDue)}</Badge>
+        )}
+        {actualAmount != null && extraDue === 0 && (
+          <Badge variant="secondary">Факт {formatUAH(actualAmount)}</Badge>
+        )}
       </div>
     </div>
   );

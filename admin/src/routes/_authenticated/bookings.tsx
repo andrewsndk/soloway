@@ -24,7 +24,7 @@ import {
 import { BookingDialog } from "@/components/BookingDialog";
 import { ClientCardDialog } from "@/components/ClientCardDialog";
 import { fetchSettings, formatLabel } from "@/lib/settings";
-import { formatDate, formatTime, formatUAH } from "@/lib/pricing";
+import { actualStayMinutes, calcActualAmountByTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
 import { PAYMENT_STATUSES } from "@/lib/payment";
 import { downloadCSV } from "@/lib/csv";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
@@ -173,6 +173,33 @@ function BookingsPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const checkMut = useMutation({
+    mutationFn: async ({ booking, type }: { booking: BookingRow; type: "in" | "out" }) => {
+      const now = new Date().toISOString();
+      const payload = type === "in" ? { check_in_at: now } : { check_out_at: now };
+      const { data: before } = await supabase.from("bookings").select("*").eq("id", booking.id).maybeSingle();
+      const { data: updated, error } = await supabase.from("bookings").update(payload).eq("id", booking.id).select("*").single();
+      if (error) throw error;
+      await logActionQuietly({
+        action: "update",
+        entityType: "booking",
+        entityId: booking.id,
+        entityLabel: `${updated.child_name} · ${updated.visit_date}`,
+        summary: type === "in"
+          ? `Відмічено прихід дитини ${updated.child_name}`
+          : `Відмічено вихід дитини ${updated.child_name}`,
+        before: before ? compactDiff(before, updated) : null,
+        after: updated,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Час візиту оновлено");
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      qc.invalidateQueries({ queryKey: ["client-bookings"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const changeStatus = (booking: BookingRow, status: string) => {
     if (status === booking.status) return;
     if (status === "Завершено" && !booking.teacher_comment?.trim()) {
@@ -197,6 +224,10 @@ function BookingsPage() {
       Сума: b.amount,
       Оплата: b.payment_status,
       Статус: b.status,
+      "Чек-ін": b.check_in_at ?? "",
+      "Чек-аут": b.check_out_at ?? "",
+      "Фактичний час": formatDuration(actualStayMinutes(b.check_in_at, b.check_out_at)),
+      "Доплата": settings ? calcExtraDue(b.amount, b.format, b.check_in_at, b.check_out_at, settings) : 0,
     }));
     downloadCSV(`bookings-${new Date().toISOString().slice(0,10)}.csv`, rows);
   };
@@ -258,6 +289,7 @@ function BookingsPage() {
                 <TableHead>Дата/час</TableHead>
                 <TableHead>Дитина</TableHead>
                 <TableHead>Батьки</TableHead>
+                <TableHead>Факт</TableHead>
                 <TableHead>Формат</TableHead>
                 <TableHead>Джерело</TableHead>
                 <TableHead className="text-right">Сума</TableHead>
@@ -268,7 +300,7 @@ function BookingsPage() {
             </TableHeader>
             <TableBody>
               {filtered.length === 0 && (
-                <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-6">Немає бронювань за цими фільтрами</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">Немає бронювань за цими фільтрами</TableCell></TableRow>
               )}
               {filtered.map((b) => (
                 <TableRow key={b.id}>
@@ -286,6 +318,14 @@ function BookingsPage() {
                   <TableCell className="text-sm">
                     <div>{b.parent_name}</div>
                     <div className="text-xs text-muted-foreground">{b.phone}</div>
+                  </TableCell>
+                  <TableCell>
+                    <CheckVisitCell
+                      booking={b}
+                      settings={settings}
+                      pending={checkMut.isPending}
+                      onCheck={(type) => checkMut.mutate({ booking: b, type })}
+                    />
                   </TableCell>
                   <TableCell className="text-sm">
                     {settings ? formatLabel(settings.formats, b.format) : b.format}
@@ -418,6 +458,8 @@ type BookingRow = {
   extra_services: string[];
   amount: number;
   amount_override: boolean;
+  check_in_at: string | null;
+  check_out_at: string | null;
   payment_status: string;
   parent_comment: string | null;
   teacher_comment: string | null;
@@ -438,6 +480,8 @@ function toDraft(b: BookingRow) {
     extra_services: b.extra_services ?? [],
     amount: String(b.amount ?? 0),
     amount_override: !!b.amount_override,
+    check_in_at: b.check_in_at,
+    check_out_at: b.check_out_at,
     payment_status: b.payment_status ?? "не оплачено",
     parent_comment: b.parent_comment ?? "",
     teacher_comment: b.teacher_comment ?? "",
@@ -478,6 +522,51 @@ function PaymentStatusLabel({ status }: { status?: string | null }) {
       <Icon className={`h-4 w-4 shrink-0 ${style.iconClass}`} />
       <span className="truncate">{normalized}</span>
     </span>
+  );
+}
+
+function CheckVisitCell({
+  booking,
+  settings,
+  pending,
+  onCheck,
+}: {
+  booking: BookingRow;
+  settings?: Awaited<ReturnType<typeof fetchSettings>>;
+  pending: boolean;
+  onCheck: (type: "in" | "out") => void;
+}) {
+  const minutes = actualStayMinutes(booking.check_in_at, booking.check_out_at);
+  const extraDue = settings ? calcExtraDue(booking.amount, booking.format, booking.check_in_at, booking.check_out_at, settings) : 0;
+  const actualAmount = settings ? calcActualAmountByTime(booking.format, booking.check_in_at, booking.check_out_at, settings) : null;
+
+  return (
+    <div className="min-w-[190px] space-y-1.5 text-xs">
+      <div className="grid grid-cols-2 gap-1 text-muted-foreground">
+        <span>Вхід: <b className="font-medium text-foreground">{formatDateTime(booking.check_in_at)}</b></span>
+        <span>Вихід: <b className="font-medium text-foreground">{formatDateTime(booking.check_out_at)}</b></span>
+      </div>
+      <div className="flex flex-wrap items-center gap-1">
+        {!booking.check_in_at && (
+          <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => onCheck("in")} disabled={pending}>
+            Чек-ін
+          </Button>
+        )}
+        {booking.check_in_at && !booking.check_out_at && (
+          <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => onCheck("out")} disabled={pending}>
+            Чек-аут
+          </Button>
+        )}
+        {booking.check_in_at && booking.check_out_at && (
+          <Badge variant="secondary">{formatDuration(minutes)}</Badge>
+        )}
+        {extraDue > 0 ? (
+          <Badge variant="destructive">Доплата {formatUAH(extraDue)}</Badge>
+        ) : actualAmount != null ? (
+          <Badge variant="secondary">Факт {formatUAH(actualAmount)}</Badge>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
