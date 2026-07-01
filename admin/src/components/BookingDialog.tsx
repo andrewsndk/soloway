@@ -109,6 +109,9 @@ export function BookingDialog({
       if (draft.phone && !/^[+0-9\s()-]{5,}$/.test(draft.phone)) {
         throw new Error("Невірний формат телефону");
       }
+      if (draft.status === "Завершено" && !draft.teacher_comment.trim()) {
+        throw new Error("Для завершеного візиту додайте короткий коментар: що робила дитина і що її захопило");
+      }
 
       // Find or create client
       let clientId: string | null = null;

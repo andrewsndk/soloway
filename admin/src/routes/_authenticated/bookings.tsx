@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,6 +18,9 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { BookingDialog } from "@/components/BookingDialog";
 import { ClientCardDialog } from "@/components/ClientCardDialog";
 import { fetchSettings, formatLabel } from "@/lib/settings";
@@ -59,6 +63,8 @@ function BookingsPage() {
   const [editing, setEditing] = useState<typeof bookings extends (infer U)[] | undefined ? U : never | undefined>(undefined as never);
   const [clientDialogId, setClientDialogId] = useState<string | null>(null);
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
+  const [completionBooking, setCompletionBooking] = useState<BookingRow | null>(null);
+  const [completionComment, setCompletionComment] = useState("");
 
   const filtered = useMemo(() => {
     return (bookings ?? []).filter((b) => {
@@ -121,6 +127,61 @@ function BookingsPage() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const statusMut = useMutation({
+    mutationFn: async ({
+      booking,
+      status,
+      teacher_comment,
+    }: {
+      booking: BookingRow;
+      status: string;
+      teacher_comment?: string;
+    }) => {
+      const comment = teacher_comment?.trim();
+      if (status === "Завершено" && !comment && !booking.teacher_comment?.trim()) {
+        throw new Error("Для завершеного візиту додайте короткий коментар: що робила дитина і що її захопило");
+      }
+
+      const { data: before } = await supabase.from("bookings").select("*").eq("id", booking.id).maybeSingle();
+      const payload = {
+        status,
+        ...(status === "Завершено" && comment ? { teacher_comment: comment } : {}),
+      };
+      const { data: updated, error } = await supabase.from("bookings").update(payload).eq("id", booking.id).select("*").single();
+      if (error) throw error;
+
+      await logActionQuietly({
+        action: "update",
+        entityType: "booking",
+        entityId: booking.id,
+        entityLabel: `${updated.child_name} · ${updated.visit_date}`,
+        summary: status === "Завершено"
+          ? `Завершено візит для ${updated.child_name} з картою візиту`
+          : `Змінено статус бронювання для ${updated.child_name}: ${status}`,
+        before: before ? compactDiff(before, updated) : null,
+        after: updated,
+      });
+    },
+    onSuccess: () => {
+      toast.success("Статус оновлено");
+      setCompletionBooking(null);
+      setCompletionComment("");
+      qc.invalidateQueries({ queryKey: ["bookings"] });
+      qc.invalidateQueries({ queryKey: ["client-bookings"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const changeStatus = (booking: BookingRow, status: string) => {
+    if (status === booking.status) return;
+    if (status === "Завершено" && !booking.teacher_comment?.trim()) {
+      setCompletionBooking(booking);
+      setCompletionComment("");
+      return;
+    }
+    statusMut.mutate({ booking, status });
+  };
 
   const exportCSV = () => {
     const rows = filtered.map((b) => ({
@@ -249,7 +310,20 @@ function BookingsPage() {
                       </SelectContent>
                     </Select>
                   </TableCell>
-                  <TableCell><Badge variant={b.status === "Скасовано" ? "destructive" : "secondary"}>{b.status}</Badge></TableCell>
+                  <TableCell>
+                    <Select value={b.status} onValueChange={(status) => changeStatus(b, status)} disabled={statusMut.isPending}>
+                      <SelectTrigger className="h-8 w-[160px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {settings?.statuses.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            <StatusLabel status={status} />
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </TableCell>
                   <TableCell>
                     <div className="flex gap-1 justify-end">
                       <Button size="icon" variant="ghost" onClick={() => { setEditing(b as never); setOpen(true); }}>
@@ -305,6 +379,26 @@ function BookingsPage() {
         open={clientDialogOpen}
         onOpenChange={setClientDialogOpen}
         clientId={clientDialogId}
+      />
+      <CompletionCommentDialog
+        booking={completionBooking}
+        comment={completionComment}
+        onCommentChange={setCompletionComment}
+        onOpenChange={(open) => {
+          if (!open && !statusMut.isPending) {
+            setCompletionBooking(null);
+            setCompletionComment("");
+          }
+        }}
+        onSubmit={() => {
+          if (!completionBooking) return;
+          statusMut.mutate({
+            booking: completionBooking,
+            status: "Завершено",
+            teacher_comment: completionComment,
+          });
+        }}
+        pending={statusMut.isPending}
       />
     </div>
   );
@@ -384,6 +478,61 @@ function PaymentStatusLabel({ status }: { status?: string | null }) {
       <Icon className={`h-4 w-4 shrink-0 ${style.iconClass}`} />
       <span className="truncate">{normalized}</span>
     </span>
+  );
+}
+
+function StatusLabel({ status }: { status: string }) {
+  return (
+    <span className="flex items-center gap-2">
+      <Badge variant={status === "Скасовано" ? "destructive" : status === "Завершено" ? "default" : "secondary"}>
+        {status}
+      </Badge>
+    </span>
+  );
+}
+
+function CompletionCommentDialog({
+  booking,
+  comment,
+  onCommentChange,
+  onOpenChange,
+  onSubmit,
+  pending,
+}: {
+  booking: BookingRow | null;
+  comment: string;
+  onCommentChange: (value: string) => void;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: () => void;
+  pending: boolean;
+}) {
+  return (
+    <Dialog open={!!booking} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Карта візиту перед завершенням</DialogTitle>
+          <DialogDescription>
+            {booking
+              ? `Напишіть коротко, що робила дитина ${booking.child_name} і що її захопило.`
+              : "Напишіть короткий коментар про візит."}
+          </DialogDescription>
+        </DialogHeader>
+        <Textarea
+          rows={5}
+          value={comment}
+          onChange={(event) => onCommentChange(event.target.value)}
+          placeholder="Наприклад: малювала фарбами, довго грала з конструктором, зацікавилась сенсорними іграми..."
+        />
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
+            Скасувати
+          </Button>
+          <Button onClick={onSubmit} disabled={pending || !comment.trim()}>
+            {pending ? "Збереження..." : "Завершити візит"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

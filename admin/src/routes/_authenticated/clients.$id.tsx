@@ -241,11 +241,12 @@ function ClientPage() {
                 <TableHead>Годин</TableHead>
                 <TableHead className="text-right">Сума</TableHead>
                 <TableHead>Статус</TableHead>
+                <TableHead>Карта візиту</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {(bookings ?? []).length === 0 && (
-                <TableRow><TableCell colSpan={6} className="py-6 text-center text-muted-foreground">Поки що немає візитів</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="py-6 text-center text-muted-foreground">Поки що немає візитів</TableCell></TableRow>
               )}
               {(bookings ?? []).map((b) => (
                 <TableRow key={b.id}>
@@ -255,6 +256,9 @@ function ClientPage() {
                   <TableCell>{b.hours ?? "—"}</TableCell>
                   <TableCell className="text-right">{formatUAH(b.amount)}</TableCell>
                   <TableCell><Badge variant={b.status === "Скасовано" ? "destructive" : "secondary"}>{b.status}</Badge></TableCell>
+                  <TableCell className="min-w-[260px] whitespace-pre-wrap text-sm">
+                    {b.teacher_comment || "—"}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
