@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { CalendarDays, ClipboardList, History, LayoutDashboard, Settings, Users, LogOut } from "lucide-react";
 import { toast } from "sonner";
+import logoImg from "@/assets/l.png";
 
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
@@ -51,8 +52,8 @@ function AuthedLayout() {
         <Sidebar collapsible="icon">
           <SidebarHeader>
             <div className="flex items-center gap-2 px-2 py-2">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground font-semibold">
-                S
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-white p-1">
+                <img src={logoImg} alt="Soloway" className="h-full w-full object-contain" />
               </div>
               <div className="flex flex-col group-data-[collapsible=icon]:hidden">
                 <span className="text-sm font-semibold">Soloway</span>
