@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchSettings, saveSettings, DEFAULT_SETTINGS, type AppSettings } from "@/lib/settings";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
-import { downloadDatabaseBackupCsv, downloadDatabaseBackupSql } from "@/lib/backup";
-import { DatabaseBackup, Download } from "lucide-react";
+import { downloadAccountantPeriodCsv, downloadDatabaseBackupCsv, downloadDatabaseBackupSql } from "@/lib/backup";
+import { Calculator, DatabaseBackup, Download } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -21,6 +21,8 @@ function SettingsPage() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
   const [s, setS] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [accountingFrom, setAccountingFrom] = useState(startOfCurrentMonth());
+  const [accountingTo, setAccountingTo] = useState(today());
 
   useEffect(() => { if (data) setS(data); }, [data]);
 
@@ -61,6 +63,14 @@ function SettingsPage() {
       toast.success(
         `Supabase SQL завантажено: ${counts.clients} клієнтів, ${counts.bookings} бронювань, ${counts.audit_logs} дій`,
       );
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const accountingExportMut = useMutation({
+    mutationFn: downloadAccountantPeriodCsv,
+    onSuccess: (result) => {
+      toast.success(`Експорт для бухгалтера завантажено: ${result.count} бронювань, сума ${result.total} грн`);
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -141,6 +151,43 @@ function SettingsPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Експорт по періодах для бухгалтера</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-[1fr_1fr_auto] md:items-end">
+          <div className="space-y-1.5">
+            <Label htmlFor="accounting-from">Початок періоду</Label>
+            <Input
+              id="accounting-from"
+              type="date"
+              value={accountingFrom}
+              onChange={(event) => setAccountingFrom(event.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="accounting-to">Кінець періоду</Label>
+            <Input
+              id="accounting-to"
+              type="date"
+              value={accountingTo}
+              onChange={(event) => setAccountingTo(event.target.value)}
+            />
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => accountingExportMut.mutate({ dateFrom: accountingFrom, dateTo: accountingTo })}
+            disabled={accountingExportMut.isPending}
+          >
+            <Calculator className="mr-1 h-4 w-4" />
+            {accountingExportMut.isPending ? "Створення..." : "Експорт CSV"}
+          </Button>
+          <p className="text-sm text-muted-foreground md:col-span-3">
+            CSV містить бронювання за обраний період, статус оплати, суму, джерело, послуги та підсумки по оплаті.
+          </p>
+        </CardContent>
+      </Card>
+
       <div className="flex justify-end">
         <Button onClick={() => mut.mutate()} disabled={mut.isPending}>
           {mut.isPending ? "Збереження…" : "Зберегти налаштування"}
@@ -148,6 +195,16 @@ function SettingsPage() {
       </div>
     </div>
   );
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function startOfCurrentMonth() {
+  const date = new Date();
+  date.setDate(1);
+  return date.toISOString().slice(0, 10);
 }
 
 function Tariff({ label, value, onChange }: { label: string; value: number; onChange: (v: string) => void }) {

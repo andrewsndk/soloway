@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Json, Tables } from "@/integrations/supabase/types";
+import { DEFAULT_SETTINGS, type AppSettings } from "@/lib/settings";
 
 type ClientRow = Tables<"clients">;
 type BookingRow = Tables<"bookings">;
@@ -109,6 +110,102 @@ export async function downloadDatabaseBackupSql(): Promise<BackupCounts> {
   return counts(data, instructions.length);
 }
 
+export async function downloadAccountantPeriodCsv({
+  dateFrom,
+  dateTo,
+}: {
+  dateFrom: string;
+  dateTo: string;
+}): Promise<{ count: number; total: number }> {
+  if (!dateFrom || !dateTo) throw new Error("Оберіть дату початку і дату завершення періоду");
+  if (dateFrom > dateTo) throw new Error("Дата початку не може бути пізніше дати завершення");
+
+  const [{ data: bookings, error }, settings] = await Promise.all([
+    supabase
+      .from("bookings")
+      .select("*")
+      .gte("visit_date", dateFrom)
+      .lte("visit_date", dateTo)
+      .order("visit_date", { ascending: true })
+      .order("visit_time", { ascending: true }),
+    fetchBackupSettings(),
+  ]);
+  if (error) throw error;
+
+  const rows = (bookings ?? []).map((booking) => ({
+    date: booking.visit_date,
+    time: booking.visit_time?.slice(0, 5) ?? "",
+    child_name: booking.child_name,
+    parent_name: booking.parent_name,
+    phone: booking.phone ?? "",
+    format: formatLabel(settings, booking.format),
+    hours: booking.hours ?? "",
+    payment_status: booking.payment_status,
+    status: booking.status,
+    amount: booking.amount,
+    source: booking.source ?? "",
+    extra_services: booking.extra_services ?? [],
+    parent_comment: booking.parent_comment ?? "",
+    teacher_comment: booking.teacher_comment ?? "",
+  }));
+
+  const activeRows = rows.filter((row) => row.status !== "Скасовано");
+  const total = sum(activeRows.map((row) => row.amount));
+  const paidCash = sum(activeRows.filter((row) => row.payment_status === "оплачено готівкою").map((row) => row.amount));
+  const paidCard = sum(activeRows.filter((row) => row.payment_status === "оплачено карткою").map((row) => row.amount));
+  const unpaid = sum(activeRows.filter((row) => row.payment_status === "не оплачено").map((row) => row.amount));
+  const cancelled = sum(rows.filter((row) => row.status === "Скасовано").map((row) => row.amount));
+
+  const csv = toCsv(
+    [
+      "Дата",
+      "Час",
+      "Дитина",
+      "Батьки",
+      "Телефон",
+      "Формат",
+      "Годин",
+      "Оплата",
+      "Статус",
+      "Сума",
+      "Джерело",
+      "Послуги",
+      "Коментар батьків",
+      "Карта візиту",
+    ],
+    rows.map((row) => ({
+      Дата: row.date,
+      Час: row.time,
+      Дитина: row.child_name,
+      Батьки: row.parent_name,
+      Телефон: row.phone,
+      Формат: row.format,
+      Годин: row.hours,
+      Оплата: row.payment_status,
+      Статус: row.status,
+      Сума: row.amount,
+      Джерело: row.source,
+      Послуги: row.extra_services,
+      "Коментар батьків": row.parent_comment,
+      "Карта візиту": row.teacher_comment,
+    })),
+    [
+      [],
+      ["Підсумки за період", `${dateFrom} — ${dateTo}`],
+      ["Усього бронювань", rows.length],
+      ["Активних бронювань без скасованих", activeRows.length],
+      ["Сума без скасованих", total],
+      ["Оплачено готівкою", paidCash],
+      ["Оплачено карткою", paidCard],
+      ["Не оплачено", unpaid],
+      ["Скасовано на суму", cancelled],
+    ],
+  );
+
+  downloadTextFile(`soloway-accounting-${dateFrom}_${dateTo}.csv`, csv, "text/csv;charset=utf-8;");
+  return { count: rows.length, total };
+}
+
 async function fetchBackupData(): Promise<BackupData> {
   const [clients, bookings, auditLogs, appSettings] = await Promise.all([
     supabase.from("clients").select("*").order("created_at", { ascending: true }),
@@ -178,12 +275,31 @@ function quoteIdent(value: string) {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
-function toCsv<T extends Record<string, unknown>>(headers: string[], rows: T[]) {
+function toCsv<T extends Record<string, unknown>>(headers: string[], rows: T[], footerRows: unknown[][] = []) {
   const lines = [
     headers.join(","),
     ...rows.map((row) => headers.map((header) => csvValue(row[header])).join(",")),
+    ...footerRows.map((row) => row.map(csvValue).join(",")),
   ];
   return `\uFEFF${lines.join("\n")}`;
+}
+
+async function fetchBackupSettings(): Promise<AppSettings> {
+  const { data, error } = await supabase
+    .from("app_settings")
+    .select("data")
+    .eq("id", 1)
+    .maybeSingle();
+  if (error) throw error;
+  return { ...DEFAULT_SETTINGS, ...((data?.data as Partial<AppSettings> | null) ?? {}) };
+}
+
+function formatLabel(settings: AppSettings, key: string) {
+  return settings.formats.find((format) => format.key === key)?.label ?? key;
+}
+
+function sum(values: number[]) {
+  return values.reduce((total, value) => total + Number(value || 0), 0);
 }
 
 function csvValue(value: unknown) {
