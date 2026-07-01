@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchSettings, saveSettings, DEFAULT_SETTINGS, type AppSettings } from "@/lib/settings";
+import { compactDiff, logActionQuietly } from "@/lib/audit";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -22,7 +23,19 @@ function SettingsPage() {
   useEffect(() => { if (data) setS(data); }, [data]);
 
   const mut = useMutation({
-    mutationFn: () => saveSettings(s),
+    mutationFn: async () => {
+      const before = data ?? DEFAULT_SETTINGS;
+      await saveSettings(s);
+      await logActionQuietly({
+        action: "update",
+        entityType: "settings",
+        entityId: "app_settings",
+        entityLabel: "Налаштування CRM",
+        summary: "Оновлено налаштування CRM",
+        before: compactDiff(before, s),
+        after: s,
+      });
+    },
     onSuccess: () => { toast.success("Налаштування збережено"); qc.invalidateQueries({ queryKey: ["settings"] }); },
     onError: (e: Error) => toast.error(e.message),
   });

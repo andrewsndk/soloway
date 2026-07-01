@@ -23,6 +23,7 @@ import { fetchSettings, formatLabel } from "@/lib/settings";
 import { formatDate, formatTime, formatUAH } from "@/lib/pricing";
 import { PAYMENT_STATUSES } from "@/lib/payment";
 import { downloadCSV } from "@/lib/csv";
+import { compactDiff, logActionQuietly } from "@/lib/audit";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Banknote, ChevronLeft, ChevronRight, CircleAlert, CreditCard, Download, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -79,8 +80,19 @@ function BookingsPage() {
 
   const delMut = useMutation({
     mutationFn: async (id: string) => {
+      const { data: before } = await supabase.from("bookings").select("*").eq("id", id).maybeSingle();
       const { error } = await supabase.from("bookings").delete().eq("id", id);
       if (error) throw error;
+      if (before) {
+        await logActionQuietly({
+          action: "delete",
+          entityType: "booking",
+          entityId: id,
+          entityLabel: `${before.child_name} · ${before.visit_date}`,
+          summary: `Видалено бронювання для ${before.child_name} на ${before.visit_date}`,
+          before,
+        });
+      }
     },
     onSuccess: () => {
       toast.success("Видалено");
@@ -91,8 +103,18 @@ function BookingsPage() {
 
   const paymentMut = useMutation({
     mutationFn: async ({ id, payment_status }: { id: string; payment_status: string }) => {
-      const { error } = await supabase.from("bookings").update({ payment_status }).eq("id", id);
+      const { data: before } = await supabase.from("bookings").select("*").eq("id", id).maybeSingle();
+      const { data: updated, error } = await supabase.from("bookings").update({ payment_status }).eq("id", id).select("*").single();
       if (error) throw error;
+      await logActionQuietly({
+        action: "update",
+        entityType: "booking",
+        entityId: id,
+        entityLabel: `${updated.child_name} · ${updated.visit_date}`,
+        summary: `Змінено оплату бронювання для ${updated.child_name}: ${payment_status}`,
+        before: before ? compactDiff(before, updated) : null,
+        after: updated,
+      });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["bookings"] });

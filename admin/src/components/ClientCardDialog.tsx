@@ -17,6 +17,7 @@ import {
 import { fetchSettings, formatLabel } from "@/lib/settings";
 import { formatDate, formatTime, formatUAH } from "@/lib/pricing";
 import { ClientPhotoUpload } from "@/components/ClientPhotoUpload";
+import { compactDiff, logActionQuietly } from "@/lib/audit";
 import { Edit3, ExternalLink, ImageIcon, Save, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -82,12 +83,23 @@ export function ClientCardDialog({
   const saveMut = useMutation({
     mutationFn: async () => {
       if (!clientId) return;
-      const { error } = await supabase.from("clients").update({
+      const payload = {
         ...form,
         child_birthdate: form.child_birthdate || null,
         phone: form.phone || null,
-      }).eq("id", clientId);
+      };
+      const { data: before } = await supabase.from("clients").select("*").eq("id", clientId).maybeSingle();
+      const { data: updated, error } = await supabase.from("clients").update(payload).eq("id", clientId).select("*").single();
       if (error) throw error;
+      await logActionQuietly({
+        action: "update",
+        entityType: "client",
+        entityId: clientId,
+        entityLabel: `${updated.child_name} · ${updated.parent_name}`,
+        summary: `Оновлено картку клієнта ${updated.child_name}`,
+        before: before ? compactDiff(before, updated) : null,
+        after: updated,
+      });
     },
     onSuccess: () => {
       toast.success("Збережено");

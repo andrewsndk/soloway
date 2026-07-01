@@ -4,6 +4,7 @@ import { ImageIcon, Loader2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { compactDiff, logActionQuietly } from "@/lib/audit";
 import { cn } from "@/lib/utils";
 
 const CLIENT_PHOTOS_BUCKET = "client-photos";
@@ -51,12 +52,24 @@ export function ClientPhotoUpload({
       if (uploadError) throw uploadError;
 
       const { data } = supabase.storage.from(CLIENT_PHOTOS_BUCKET).getPublicUrl(path);
-      const { error: updateError } = await supabase
+      const { data: before } = await supabase.from("clients").select("*").eq("id", clientId).maybeSingle();
+      const { data: updated, error: updateError } = await supabase
         .from("clients")
         .update({ photo_url: data.publicUrl })
-        .eq("id", clientId);
+        .eq("id", clientId)
+        .select("*")
+        .single();
 
       if (updateError) throw updateError;
+      await logActionQuietly({
+        action: "update",
+        entityType: "client",
+        entityId: clientId,
+        entityLabel: `${updated?.child_name ?? childName} · ${updated?.parent_name ?? ""}`,
+        summary: `Оновлено фото клієнта ${updated?.child_name ?? childName}`,
+        before: before && updated ? compactDiff(before, updated) : null,
+        after: updated ?? { photo_url: data.publicUrl },
+      });
     },
     onSuccess: () => {
       toast.success("Фото збережено");
@@ -67,8 +80,18 @@ export function ClientPhotoUpload({
 
   const removeMut = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("clients").update({ photo_url: null }).eq("id", clientId);
+      const { data: before } = await supabase.from("clients").select("*").eq("id", clientId).maybeSingle();
+      const { data: updated, error } = await supabase.from("clients").update({ photo_url: null }).eq("id", clientId).select("*").single();
       if (error) throw error;
+      await logActionQuietly({
+        action: "update",
+        entityType: "client",
+        entityId: clientId,
+        entityLabel: `${updated.child_name} · ${updated.parent_name}`,
+        summary: `Прибрано фото клієнта ${updated.child_name}`,
+        before: before ? compactDiff(before, updated) : null,
+        after: updated,
+      });
     },
     onSuccess: () => {
       toast.success("Фото прибрано");

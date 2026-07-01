@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/auth")({
@@ -19,6 +18,11 @@ function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const normalizeLogin = (value: string) => {
+    const login = value.trim().toLowerCase();
+    return login.includes("@") ? login : `${login}@soloway.local`;
+  };
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) navigate({ to: "/dashboard" });
@@ -28,7 +32,10 @@ function AuthPage() {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: normalizeLogin(email),
+      password,
+    });
     setLoading(false);
     if (error) {
       toast.error(error.message);
@@ -36,22 +43,6 @@ function AuthPage() {
     }
     toast.success("Ласкаво просимо!");
     navigate({ to: "/dashboard" });
-  };
-
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { emailRedirectTo: `${window.location.origin}/soloadmin/dashboard` },
-    });
-    setLoading(false);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    toast.success("Акаунт створено. Перевірте пошту для підтвердження або увійдіть.");
   };
 
   return (
@@ -65,42 +56,33 @@ function AuthPage() {
           <CardDescription>Облік візитів і клієнтів дитячого простору</CardDescription>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="signin">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="signin">Вхід</TabsTrigger>
-              <TabsTrigger value="signup">Реєстрація</TabsTrigger>
-            </TabsList>
-            <TabsContent value="signin">
-              <form onSubmit={handleSignIn} className="space-y-3 pt-2">
-                <div className="space-y-2">
-                  <Label htmlFor="email-in">Email</Label>
-                  <Input id="email-in" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="pw-in">Пароль</Label>
-                  <Input id="pw-in" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Зачекайте…" : "Увійти"}
-                </Button>
-              </form>
-            </TabsContent>
-            <TabsContent value="signup">
-              <form onSubmit={handleSignUp} className="space-y-3 pt-2">
-                <div className="space-y-2">
-                  <Label htmlFor="email-up">Email</Label>
-                  <Input id="email-up" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="pw-up">Пароль</Label>
-                  <Input id="pw-up" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
-                </div>
-                <Button type="submit" className="w-full" disabled={loading}>
-                  {loading ? "Зачекайте…" : "Створити акаунт"}
-                </Button>
-              </form>
-            </TabsContent>
-          </Tabs>
+          <form onSubmit={handleSignIn} className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="email-in">Логін</Label>
+              <Input
+                id="email-in"
+                type="text"
+                autoComplete="username"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pw-in">Пароль</Label>
+              <Input
+                id="pw-in"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+            </div>
+            <Button type="submit" className="w-full" disabled={loading}>
+              {loading ? "Зачекайте…" : "Увійти"}
+            </Button>
+          </form>
         </CardContent>
       </Card>
     </div>

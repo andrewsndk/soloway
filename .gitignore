@@ -32,4 +32,5 @@ admin/.wrangler
 admin/.vercel
 admin/.env
 admin/.env.local
+admin/supabase/.temp
 .env*

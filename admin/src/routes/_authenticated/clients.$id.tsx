@@ -19,6 +19,7 @@ import {
 import { ClientPhotoUpload } from "@/components/ClientPhotoUpload";
 import { fetchSettings, formatLabel } from "@/lib/settings";
 import { formatDate, formatTime, formatUAH } from "@/lib/pricing";
+import { compactDiff, logActionQuietly } from "@/lib/audit";
 import { ArrowLeft, Edit3, ImageIcon, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -76,12 +77,23 @@ function ClientPage() {
 
   const saveMut = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from("clients").update({
+      const payload = {
         ...form,
         child_birthdate: form.child_birthdate || null,
         phone: form.phone || null,
-      }).eq("id", id);
+      };
+      const { data: before } = await supabase.from("clients").select("*").eq("id", id).maybeSingle();
+      const { data: updated, error } = await supabase.from("clients").update(payload).eq("id", id).select("*").single();
       if (error) throw error;
+      await logActionQuietly({
+        action: "update",
+        entityType: "client",
+        entityId: id,
+        entityLabel: `${updated.child_name} · ${updated.parent_name}`,
+        summary: `Оновлено картку клієнта ${updated.child_name}`,
+        before: before ? compactDiff(before, updated) : null,
+        after: updated,
+      });
     },
     onSuccess: () => {
       toast.success("Збережено");
@@ -94,8 +106,19 @@ function ClientPage() {
 
   const delMut = useMutation({
     mutationFn: async () => {
+      const { data: before } = await supabase.from("clients").select("*").eq("id", id).maybeSingle();
       const { error } = await supabase.from("clients").delete().eq("id", id);
       if (error) throw error;
+      if (before) {
+        await logActionQuietly({
+          action: "delete",
+          entityType: "client",
+          entityId: id,
+          entityLabel: `${before.child_name} · ${before.parent_name}`,
+          summary: `Видалено картку клієнта ${before.child_name}`,
+          before,
+        });
+      }
     },
     onSuccess: () => {
       toast.success("Картку видалено");

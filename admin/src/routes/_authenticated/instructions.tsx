@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchSettings, saveSettings, DEFAULT_SETTINGS, type AppSettings } from "@/lib/settings";
+import { compactDiff, logActionQuietly } from "@/lib/audit";
 
 type InstructionRole = "administrator" | "teacher";
 
@@ -33,7 +34,19 @@ function InstructionsPage() {
   }, [data]);
 
   const saveMut = useMutation({
-    mutationFn: () => saveSettings(settings),
+    mutationFn: async () => {
+      const before = data ?? DEFAULT_SETTINGS;
+      await saveSettings(settings);
+      await logActionQuietly({
+        action: "update",
+        entityType: "instructions",
+        entityId: role,
+        entityLabel: ROLE_LABELS[role],
+        summary: `Оновлено інструкції: ${ROLE_LABELS[role]}`,
+        before: compactDiff(before.instructions, settings.instructions),
+        after: settings.instructions,
+      });
+    },
     onSuccess: () => {
       toast.success("Інструкції збережено");
       setEditing(false);

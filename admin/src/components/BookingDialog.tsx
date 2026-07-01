@@ -24,6 +24,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { fetchSettings, type AppSettings } from "@/lib/settings";
 import { calcAmount } from "@/lib/pricing";
 import { PAYMENT_STATUSES } from "@/lib/payment";
+import { compactDiff, logActionQuietly } from "@/lib/audit";
 import { Banknote, CircleAlert, CreditCard } from "lucide-react";
 import { toast } from "sonner";
 
@@ -133,10 +134,18 @@ export function BookingDialog({
         const { data: created, error: ce } = await supabase
           .from("clients")
           .insert({ parent_name: parent, child_name: child, phone: phone || null })
-          .select("id")
+          .select("*")
           .single();
         if (ce) throw ce;
         clientId = created.id;
+        await logActionQuietly({
+          action: "create",
+          entityType: "client",
+          entityId: created.id,
+          entityLabel: `${created.child_name} · ${created.parent_name}`,
+          summary: `Створено клієнта ${created.child_name} під час створення бронювання`,
+          after: created,
+        });
       }
 
       const payload = {
@@ -159,11 +168,29 @@ export function BookingDialog({
       };
 
       if (draft.id) {
-        const { error } = await supabase.from("bookings").update(payload).eq("id", draft.id);
+        const { data: before } = await supabase.from("bookings").select("*").eq("id", draft.id).maybeSingle();
+        const { data: updated, error } = await supabase.from("bookings").update(payload).eq("id", draft.id).select("*").single();
         if (error) throw error;
+        await logActionQuietly({
+          action: "update",
+          entityType: "booking",
+          entityId: draft.id,
+          entityLabel: `${child} · ${draft.visit_date}`,
+          summary: `Оновлено бронювання для ${child} на ${draft.visit_date}`,
+          before: before ? compactDiff(before, updated) : null,
+          after: updated,
+        });
       } else {
-        const { error } = await supabase.from("bookings").insert(payload);
+        const { data: created, error } = await supabase.from("bookings").insert(payload).select("*").single();
         if (error) throw error;
+        await logActionQuietly({
+          action: "create",
+          entityType: "booking",
+          entityId: created.id,
+          entityLabel: `${child} · ${draft.visit_date}`,
+          summary: `Створено бронювання для ${child} на ${draft.visit_date}`,
+          after: created,
+        });
       }
     },
     onSuccess: () => {
