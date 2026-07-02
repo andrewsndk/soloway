@@ -292,8 +292,8 @@ function BookingsPage() {
                 <TableHead>Формат</TableHead>
                 <TableHead>Джерело</TableHead>
                 <TableHead className="text-right">Сума</TableHead>
-                <TableHead>Оплата</TableHead>
-                <TableHead>Статус</TableHead>
+                <TableHead className="w-[150px]">Оплата</TableHead>
+                <TableHead className="w-[130px]">Статус</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
@@ -332,12 +332,12 @@ function BookingsPage() {
                   </TableCell>
                   <TableCell className="text-sm">{b.source}</TableCell>
                   <TableCell className="text-right font-semibold">{formatUAH(b.amount)}</TableCell>
-                  <TableCell>
+                  <TableCell className="max-w-[150px]">
                     <Select
                       value={b.payment_status ?? "не оплачено"}
                       onValueChange={(payment_status) => paymentMut.mutate({ id: b.id, payment_status })}
                     >
-                      <SelectTrigger className={`h-8 w-[190px] border ${paymentStyle(b.payment_status).trigger}`}>
+                      <SelectTrigger className={`h-8 w-[150px] border ${paymentStyle(b.payment_status).trigger}`}>
                         <PaymentStatusLabel status={b.payment_status} />
                       </SelectTrigger>
                       <SelectContent>
@@ -349,9 +349,9 @@ function BookingsPage() {
                       </SelectContent>
                     </Select>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="max-w-[130px]">
                     <Select value={b.status} onValueChange={(status) => changeStatus(b, status)} disabled={statusMut.isPending}>
-                      <SelectTrigger className="h-8 w-[160px]">
+                      <SelectTrigger className="h-8 w-[130px]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
