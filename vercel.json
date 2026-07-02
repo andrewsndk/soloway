@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/soloadmin/assets/route-52_tJxc7.js",
+      "destination": "https://soloway-admin.vercel.app/assets/route-52_tJxc7.js?v=fallback"
+    },
+    {
       "source": "/soloadmin/assets/:path*",
       "destination": "https://soloway-admin.vercel.app/assets/:path*"
     },

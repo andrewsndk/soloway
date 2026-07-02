@@ -108,6 +108,26 @@ function RootShell({ children }: { children: ReactNode }) {
       </head>
       <body>
         {children}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (() => {
+                const key = "soloway-admin-import-recovery";
+                const recover = (reason) => {
+                  const message = String(reason?.message || reason || "");
+                  if (!message.includes("dynamically imported module") && !message.includes("Loading chunk")) return;
+                  if (sessionStorage.getItem(key) === "1") return;
+                  sessionStorage.setItem(key, "1");
+                  const url = new URL(location.href);
+                  url.searchParams.set("fresh", String(Date.now()));
+                  location.replace(url.toString());
+                };
+                addEventListener("error", (event) => recover(event.error || event.message));
+                addEventListener("unhandledrejection", (event) => recover(event.reason));
+              })();
+            `,
+          }}
+        />
         <Scripts />
       </body>
     </html>
