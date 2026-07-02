@@ -371,10 +371,10 @@ function PaymentStatusLabel({ status }: { status?: string | null }) {
   const Icon = style.icon;
 
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 align-middle leading-none">
+    <div className="inline-flex min-w-0 items-center gap-1.5 align-middle leading-none">
       <Icon className={`h-3.5 w-3.5 shrink-0 ${style.iconClass}`} />
       <span className="truncate leading-none">{normalized}</span>
-    </span>
+    </div>
   );
 }
 

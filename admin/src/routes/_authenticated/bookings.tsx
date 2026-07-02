@@ -292,8 +292,8 @@ function BookingsPage() {
                 <TableHead>Формат</TableHead>
                 <TableHead>Джерело</TableHead>
                 <TableHead className="text-right">Сума</TableHead>
-                <TableHead className="w-[150px]">Оплата</TableHead>
-                <TableHead className="w-[130px]">Статус</TableHead>
+                <TableHead className="w-[120px]">Оплата</TableHead>
+                <TableHead className="w-[108px] pl-4">Статус</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
@@ -332,12 +332,12 @@ function BookingsPage() {
                   </TableCell>
                   <TableCell className="text-sm">{b.source}</TableCell>
                   <TableCell className="text-right font-semibold">{formatUAH(b.amount)}</TableCell>
-                  <TableCell className="max-w-[150px]">
+                  <TableCell className="max-w-[120px]">
                     <Select
                       value={b.payment_status ?? "не оплачено"}
                       onValueChange={(payment_status) => paymentMut.mutate({ id: b.id, payment_status })}
                     >
-                      <SelectTrigger className={`h-8 w-[150px] border ${paymentStyle(b.payment_status).trigger}`}>
+                      <SelectTrigger className={`h-8 w-[120px] border px-2 ${paymentStyle(b.payment_status).trigger}`}>
                         <PaymentStatusLabel status={b.payment_status} />
                       </SelectTrigger>
                       <SelectContent>
@@ -349,9 +349,9 @@ function BookingsPage() {
                       </SelectContent>
                     </Select>
                   </TableCell>
-                  <TableCell className="max-w-[130px]">
+                  <TableCell className="max-w-[108px] pl-4">
                     <Select value={b.status} onValueChange={(status) => changeStatus(b, status)} disabled={statusMut.isPending}>
-                      <SelectTrigger className="h-8 w-[130px]">
+                      <SelectTrigger className="h-8 w-[108px] px-2">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -515,12 +515,17 @@ function PaymentStatusLabel({ status }: { status?: string | null }) {
   const normalized = status || "не оплачено";
   const style = paymentStyle(normalized);
   const Icon = style.icon;
+  const label = normalized === "оплачено готівкою"
+    ? "готівка"
+    : normalized === "оплачено карткою"
+      ? "картка"
+      : "не опл.";
 
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 align-middle leading-none">
+    <div className="inline-flex min-w-0 items-center gap-1.5 align-middle leading-none">
       <Icon className={`h-3.5 w-3.5 shrink-0 ${style.iconClass}`} />
-      <span className="truncate leading-none">{normalized}</span>
-    </span>
+      <span className="truncate leading-none">{label}</span>
+    </div>
   );
 }
 
