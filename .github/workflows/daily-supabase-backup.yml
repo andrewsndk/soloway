@@ -1,0 +1,93 @@
+name: Daily Supabase Backup
+
+on:
+  schedule:
+    # 03:15 Lisbon during summer time, 02:15 UTC.
+    - cron: "15 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-supabase-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BACKUP_DIR: admin/backups/supabase
+      PGSSLMODE: require
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Validate secrets
+        run: |
+          test -n "${{ secrets.SUPABASE_DB_URL }}"
+          test -n "${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}"
+
+      - name: Create encrypted backup
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          BACKUP_ENCRYPTION_PASSPHRASE: ${{ secrets.BACKUP_ENCRYPTION_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$BACKUP_DIR"
+          stamp="$(date -u +'%Y-%m-%dT%H-%M-%SZ')"
+          backup_file="$BACKUP_DIR/soloway-public-${stamp}.sql.gz.gpg"
+
+          pg_dump "$SUPABASE_DB_URL" \
+            --schema=public \
+            --no-owner \
+            --no-privileges \
+            --clean \
+            --if-exists \
+            | gzip -9 \
+            | gpg --batch --yes \
+                --pinentry-mode loopback \
+                --passphrase "$BACKUP_ENCRYPTION_PASSPHRASE" \
+                --symmetric \
+                --cipher-algo AES256 \
+                --output "$backup_file"
+
+          bytes="$(wc -c < "$backup_file" | tr -d ' ')"
+          cat > "$BACKUP_DIR/latest.json" <<JSON
+          {
+            "created_at_utc": "$stamp",
+            "file": "$(basename "$backup_file")",
+            "bytes": $bytes,
+            "scope": "public schema"
+          }
+          JSON
+
+      - name: Keep last 30 backups
+        run: |
+          set -euo pipefail
+          mkdir -p "$BACKUP_DIR"
+          find "$BACKUP_DIR" -maxdepth 1 -type f -name 'soloway-public-*.sql.gz.gpg' \
+            | sort -r \
+            | tail -n +31 \
+            | xargs -r rm --
+
+      - name: Commit backup
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$BACKUP_DIR"
+
+          if git diff --cached --quiet; then
+            echo "No backup changes to commit."
+            exit 0
+          fi
+
+          git commit -m "chore: daily encrypted Supabase backup"
+          git push
