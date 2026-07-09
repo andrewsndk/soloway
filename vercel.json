@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/booking-healthcheck",
+      "schedule": "0 5 * * *"
+    }
+  ],
   "rewrites": [
     {
       "source": "/soloadmin/assets/route-52_tJxc7.js",

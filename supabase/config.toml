@@ -2,3 +2,9 @@ project_id = "awkiifqbskmktqwlnfqx"
 
 [functions.send-visit]
 verify_jwt = true
+
+[functions.format-visit-note]
+verify_jwt = true
+
+[functions.booking-healthcheck]
+verify_jwt = false
