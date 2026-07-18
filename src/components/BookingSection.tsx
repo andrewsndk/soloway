@@ -24,7 +24,7 @@ const getDefaultBookingDate = () => {
   return today >= minBookingDate ? today : minBookingDate;
 };
 
-const childAgeOptions = ["2 роки", "3 роки", "4 роки", "5 років", "6 років"];
+const childAgeOptions = ["1 рік", "2 роки", "3 роки", "4 роки", "5 років", "6 років", "7 років"];
 
 const selectClassName =
   "w-full rounded-xl border-2 border-stone-100 h-12 focus:border-primary px-4 bg-white text-foreground font-medium outline-none cursor-pointer";
