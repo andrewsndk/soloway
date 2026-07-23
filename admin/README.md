@@ -13,7 +13,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:8080/soloadmin
+Open http://localhost:8081/soloadmin
 
 ## Deployment
 
@@ -28,3 +28,9 @@ Required env vars on Vercel:
 - `SUPABASE_PUBLISHABLE_KEY`
 
 Set the Supabase auth redirect URL to `https://soloway.mom/soloadmin/dashboard`.
+
+## Supabase migrations
+
+The canonical Supabase project configuration, migrations, and Edge Functions
+live in the repository-level `supabase/` directory. Do not add a second
+`admin/supabase/` migration tree.

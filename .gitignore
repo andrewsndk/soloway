@@ -12,8 +12,9 @@ dist
 dist-ssr
 *.local
 supabase/.temp/*
-!supabase/.temp/cli-latest
-!supabase/.temp/linked-project.json
+/admin/supabase/
+/backups/
+/tmp_*
 
 # Editor directories and files
 .vscode/*

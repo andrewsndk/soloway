@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - staging
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            admin/package-lock.json
+
+      - name: Install landing dependencies
+        run: npm ci
+
+      - name: Test landing
+        run: npm test
+
+      - name: Build landing
+        run: npm run build
+
+      - name: Install admin dependencies
+        working-directory: admin
+        run: npm ci
+
+      - name: Typecheck admin
+        working-directory: admin
+        run: npx tsc --noEmit
+
+      - name: Build admin
+        working-directory: admin
+        run: npm run build
