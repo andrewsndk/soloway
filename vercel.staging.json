@@ -1,0 +1,20 @@
+{
+  "rewrites": [
+    {
+      "source": "/soloadmin/assets/:path*",
+      "destination": "https://soloway-admin-staging.vercel.app/assets/:path*"
+    },
+    {
+      "source": "/soloadmin",
+      "destination": "https://soloway-admin-staging.vercel.app/soloadmin"
+    },
+    {
+      "source": "/soloadmin/",
+      "destination": "https://soloway-admin-staging.vercel.app/soloadmin/"
+    },
+    {
+      "source": "/soloadmin/:path*",
+      "destination": "https://soloway-admin-staging.vercel.app/soloadmin/:path*"
+    }
+  ]
+}

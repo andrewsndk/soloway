@@ -7,7 +7,9 @@
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 
 const ADMIN_BASE_PATH = "/soloadmin";
-const ADMIN_ASSETS_BASE_URL = "https://soloway-admin.vercel.app/";
+const ADMIN_ASSETS_BASE_URL =
+  process.env.VITE_ADMIN_ASSETS_BASE_URL ||
+  "https://soloway-admin.vercel.app/";
 const ASSETS_BASE_URL = process.env.NODE_ENV === "production"
   ? ADMIN_ASSETS_BASE_URL
   : `${ADMIN_BASE_PATH}/`;

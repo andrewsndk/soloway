@@ -5,7 +5,7 @@
       "headers": [
         {
           "key": "Access-Control-Allow-Origin",
-          "value": "https://soloway.mom"
+          "value": "*"
         },
         {
           "key": "Cross-Origin-Resource-Policy",
