@@ -1,16 +1,18 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Json, Tables } from "@/integrations/supabase/types";
-import { bookingStartDateTime } from "@/lib/pricing";
+import { bookingStartDateTime, formatDateTime } from "@/lib/pricing";
 import { DEFAULT_SETTINGS, type AppSettings } from "@/lib/settings";
 
 type ClientRow = Tables<"clients">;
 type BookingRow = Tables<"bookings">;
 type AuditLogRow = Tables<"audit_logs">;
 type AppSettingsRow = Tables<"app_settings">;
+type ExpenseReceiptRow = Tables<"expense_receipts">;
 
 type BackupData = {
   clients: ClientRow[];
   bookings: BookingRow[];
+  expense_receipts: ExpenseReceiptRow[];
   audit_logs: AuditLogRow[];
   app_settings: AppSettingsRow[];
 };
@@ -22,12 +24,26 @@ const CLIENT_COLUMNS: Array<keyof ClientRow> = [
   "parent_name",
   "child_name",
   "phone",
+  "phone_normalized",
   "child_birthdate",
+  "preferred_name",
+  "attention_label",
   "photo_url",
   "who_can_pickup",
   "parent_questionnaire",
   "admin_comment",
   "teacher_comment",
+  "food_allergies",
+  "other_allergies",
+  "snack_consent",
+  "toilet_habits",
+  "hygiene_notes",
+  "adaptation_notes",
+  "calming_notes",
+  "interests",
+  "physical_restrictions",
+  "photo_consent",
+  "important_notes",
   "created_at",
   "updated_at",
 ];
@@ -38,6 +54,7 @@ const BOOKING_COLUMNS: Array<keyof BookingRow> = [
   "parent_name",
   "child_name",
   "phone",
+  "phone_normalized",
   "format",
   "hours",
   "visit_date",
@@ -51,6 +68,7 @@ const BOOKING_COLUMNS: Array<keyof BookingRow> = [
   "payment_status",
   "parent_comment",
   "teacher_comment",
+  "parent_summary",
   "status",
   "created_at",
   "updated_at",
@@ -73,6 +91,17 @@ const AUDIT_COLUMNS: Array<keyof AuditLogRow> = [
 
 const SETTINGS_COLUMNS: Array<keyof AppSettingsRow> = ["id", "data", "updated_at"];
 
+const EXPENSE_RECEIPT_COLUMNS: Array<keyof ExpenseReceiptRow> = [
+  "id",
+  "receipt_date",
+  "file_path",
+  "file_name",
+  "file_type",
+  "file_size",
+  "created_by",
+  "created_at",
+];
+
 export async function downloadDatabaseBackupCsv(): Promise<BackupCounts> {
   const data = await fetchBackupData();
   const instructions = instructionsRows(data.app_settings);
@@ -81,6 +110,7 @@ export async function downloadDatabaseBackupCsv(): Promise<BackupCounts> {
   const zip = createZip([
     { name: "clients.csv", content: toCsv(CLIENT_COLUMNS, data.clients) },
     { name: "bookings.csv", content: toCsv(BOOKING_COLUMNS, data.bookings) },
+    { name: "expense_receipts.csv", content: toCsv(EXPENSE_RECEIPT_COLUMNS, data.expense_receipts) },
     { name: "instructions.csv", content: toCsv(["section", "title", "text"], instructions) },
     { name: "audit_logs.csv", content: toCsv(AUDIT_COLUMNS, data.audit_logs) },
     { name: "app_settings.csv", content: toCsv(SETTINGS_COLUMNS, data.app_settings) },
@@ -103,6 +133,7 @@ export async function downloadDatabaseBackupSql(): Promise<BackupCounts> {
     "",
     tableInsertSql("clients", CLIENT_COLUMNS, data.clients, "id"),
     tableInsertSql("bookings", BOOKING_COLUMNS, data.bookings, "id"),
+    tableInsertSql("expense_receipts", EXPENSE_RECEIPT_COLUMNS, data.expense_receipts, "id"),
     tableInsertSql("app_settings", SETTINGS_COLUMNS, data.app_settings, "id"),
     tableInsertSql("audit_logs", AUDIT_COLUMNS, data.audit_logs, "id"),
     "commit;",
@@ -136,10 +167,10 @@ export async function downloadAccountantPeriodCsv({
   if (error) throw error;
 
   const rows = (bookings ?? []).map((booking) => ({
-    date: booking.visit_date,
+    date: formatCsvDate(booking.visit_date),
     time: booking.visit_time?.slice(0, 5) ?? "",
-    check_in_at: booking.check_in_at ?? bookingStartDateTime(booking.visit_date, booking.visit_time) ?? "",
-    check_out_at: booking.check_out_at ?? "",
+    check_in_at: formatDateTime(booking.check_in_at ?? bookingStartDateTime(booking.visit_date, booking.visit_time)),
+    check_out_at: formatDateTime(booking.check_out_at),
     child_name: booking.child_name,
     parent_name: booking.parent_name,
     phone: booking.phone ?? "",
@@ -152,13 +183,22 @@ export async function downloadAccountantPeriodCsv({
     extra_services: booking.extra_services ?? [],
     parent_comment: booking.parent_comment ?? "",
     teacher_comment: booking.teacher_comment ?? "",
+    parent_summary: booking.parent_summary ?? "",
   }));
 
-  const activeRows = rows.filter((row) => row.status !== "Скасовано");
-  const total = sum(activeRows.map((row) => row.amount));
-  const paidCash = sum(activeRows.filter((row) => row.payment_status === "оплачено готівкою").map((row) => row.amount));
-  const paidCard = sum(activeRows.filter((row) => row.payment_status === "оплачено карткою").map((row) => row.amount));
-  const unpaid = sum(activeRows.filter((row) => row.payment_status === "не оплачено").map((row) => row.amount));
+  const paidRows = rows.filter((row) => row.status !== "Скасовано" && isPaid(row.payment_status));
+  const expectedRows = rows.filter((row) =>
+    row.status !== "Скасовано" &&
+    row.status !== "Не прийшли" &&
+    row.payment_status === "не оплачено"
+  );
+  const noShowPaidRows = paidRows.filter((row) => row.status === "Не прийшли");
+  const completedRows = rows.filter((row) => row.status === "Завершено");
+  const total = sum(paidRows.map((row) => row.amount));
+  const paidCash = sum(paidRows.filter((row) => row.payment_status === "оплачено готівкою").map((row) => row.amount));
+  const paidCard = sum(paidRows.filter((row) => row.payment_status === "оплачено карткою").map((row) => row.amount));
+  const unpaid = sum(expectedRows.map((row) => row.amount));
+  const noShowPaid = sum(noShowPaidRows.map((row) => row.amount));
   const cancelled = sum(rows.filter((row) => row.status === "Скасовано").map((row) => row.amount));
 
   const csv = toCsv(
@@ -179,6 +219,7 @@ export async function downloadAccountantPeriodCsv({
       "Послуги",
       "Коментар батьків",
       "Карта візиту",
+      "Сводка для батьків",
     ],
     rows.map((row) => ({
       Дата: row.date,
@@ -197,40 +238,51 @@ export async function downloadAccountantPeriodCsv({
       Послуги: row.extra_services,
       "Коментар батьків": row.parent_comment,
       "Карта візиту": row.teacher_comment,
+      "Сводка для батьків": row.parent_summary,
     })),
     [
       [],
       ["Підсумки за період", `${dateFrom} — ${dateTo}`],
       ["Усього бронювань", rows.length],
-      ["Активних бронювань без скасованих", activeRows.length],
-      ["Сума без скасованих", total],
+      ["Фактичних завершених візитів", completedRows.length],
+      ["Оплачених, але не прийшли", noShowPaidRows.length],
+      ["Отримано оплат", total],
       ["Оплачено готівкою", paidCash],
       ["Оплачено карткою", paidCard],
-      ["Не оплачено", unpaid],
+      ["Очікується оплата", unpaid],
+      ["Оплачено, але не прийшли на суму", noShowPaid],
       ["Скасовано на суму", cancelled],
     ],
+    { delimiter: ";", excelSep: true },
   );
 
   downloadTextFile(`soloway-accounting-${dateFrom}_${dateTo}.csv`, csv, "text/csv;charset=utf-8;");
   return { count: rows.length, total };
 }
 
+function isPaid(status: string) {
+  return status === "оплачено готівкою" || status === "оплачено карткою";
+}
+
 async function fetchBackupData(): Promise<BackupData> {
-  const [clients, bookings, auditLogs, appSettings] = await Promise.all([
+  const [clients, bookings, expenseReceipts, auditLogs, appSettings] = await Promise.all([
     supabase.from("clients").select("*").order("created_at", { ascending: true }),
     supabase.from("bookings").select("*").order("visit_date", { ascending: true }).order("visit_time", { ascending: true }),
+    supabase.from("expense_receipts").select("*").order("receipt_date", { ascending: true }).order("created_at", { ascending: true }),
     supabase.from("audit_logs").select("*").order("created_at", { ascending: true }),
     supabase.from("app_settings").select("*").order("id", { ascending: true }),
   ]);
 
   if (clients.error) throw clients.error;
   if (bookings.error) throw bookings.error;
+  if (expenseReceipts.error) throw expenseReceipts.error;
   if (auditLogs.error) throw auditLogs.error;
   if (appSettings.error) throw appSettings.error;
 
   return {
     clients: clients.data ?? [],
     bookings: bookings.data ?? [],
+    expense_receipts: expenseReceipts.data ?? [],
     audit_logs: auditLogs.data ?? [],
     app_settings: appSettings.data ?? [],
   };
@@ -284,11 +336,18 @@ function quoteIdent(value: string) {
   return `"${value.replace(/"/g, '""')}"`;
 }
 
-function toCsv<T extends Record<string, unknown>>(headers: string[], rows: T[], footerRows: unknown[][] = []) {
+function toCsv<T extends Record<string, unknown>>(
+  headers: string[],
+  rows: T[],
+  footerRows: unknown[][] = [],
+  options: { delimiter?: "," | ";"; excelSep?: boolean } = {},
+) {
+  const delimiter = options.delimiter ?? ",";
   const lines = [
-    headers.join(","),
-    ...rows.map((row) => headers.map((header) => csvValue(row[header])).join(",")),
-    ...footerRows.map((row) => row.map(csvValue).join(",")),
+    ...(options.excelSep ? [`sep=${delimiter}`] : []),
+    headers.map((header) => csvValue(header, delimiter)).join(delimiter),
+    ...rows.map((row) => headers.map((header) => csvValue(row[header], delimiter)).join(delimiter)),
+    ...footerRows.map((row) => row.map((value) => csvValue(value, delimiter)).join(delimiter)),
   ];
   return `\uFEFF${lines.join("\n")}`;
 }
@@ -311,10 +370,23 @@ function sum(values: number[]) {
   return values.reduce((total, value) => total + Number(value || 0), 0);
 }
 
-function csvValue(value: unknown) {
+function formatCsvDate(value: string | null | undefined) {
+  if (!value) return "";
+  const [year, month, day] = value.split("-");
+  if (!year || !month || !day) return value;
+  return `${day}.${month}.${year}`;
+}
+
+function csvValue(value: unknown, delimiter = ",") {
   if (value === null || value === undefined) return "";
-  const text = typeof value === "object" ? JSON.stringify(value) : String(value);
-  if (/[",\n;]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  const text = Array.isArray(value)
+    ? value.join(", ")
+    : typeof value === "object"
+      ? JSON.stringify(value)
+      : String(value);
+  if (text.includes('"') || text.includes("\n") || text.includes("\r") || text.includes(delimiter)) {
+    return `"${text.replace(/"/g, '""')}"`;
+  }
   return text;
 }
 
@@ -340,6 +412,7 @@ function counts(data: BackupData, instructions: number): BackupCounts {
   return {
     clients: data.clients.length,
     bookings: data.bookings.length,
+    expense_receipts: data.expense_receipts.length,
     instructions,
     audit_logs: data.audit_logs.length,
     app_settings: data.app_settings.length,

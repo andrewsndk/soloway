@@ -2,7 +2,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 
 type AuditAction = "create" | "update" | "delete";
-type EntityType = "booking" | "client" | "settings" | "instructions";
+type EntityType = "booking" | "client" | "settings" | "instructions" | "expense_receipt";
 
 export type AuditPayload = {
   action: AuditAction;

@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -12,10 +13,11 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { ClientCardDialog } from "@/components/ClientCardDialog";
+import { BirthdayBadge } from "@/components/BirthdayBadge";
 import { downloadCSV } from "@/lib/csv";
 import { formatDate, formatUAH } from "@/lib/pricing";
 import { logActionQuietly } from "@/lib/audit";
-import { Download, ImageIcon, Trash2 } from "lucide-react";
+import { AlertTriangle, Download, ImageIcon, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/clients")({
@@ -33,16 +35,19 @@ function ClientsPage() {
     queryFn: async () => {
       const [{ data: clients, error: e1 }, { data: bookings, error: e2 }] = await Promise.all([
         supabase.from("clients").select("*").order("created_at", { ascending: false }),
-        supabase.from("bookings").select("client_id,visit_date,amount,status"),
+        supabase.from("bookings").select("client_id,visit_date,amount,status,payment_status"),
       ]);
       if (e1) throw e1;
       if (e2) throw e2;
       const byClient = new Map<string, { count: number; total: number; first?: string; last?: string }>();
       (bookings ?? []).forEach((b) => {
         if (!b.client_id) return;
+        if (b.status === "Скасовано") return;
         const cur = byClient.get(b.client_id) ?? { count: 0, total: 0 };
         cur.count += 1;
-        if (b.status !== "Скасовано") cur.total += Number(b.amount || 0);
+        if (b.payment_status === "оплачено готівкою" || b.payment_status === "оплачено карткою") {
+          cur.total += Number(b.amount || 0);
+        }
         if (!cur.first || b.visit_date < cur.first) cur.first = b.visit_date;
         if (!cur.last || b.visit_date > cur.last) cur.last = b.visit_date;
         byClient.set(b.client_id, cur);
@@ -60,6 +65,8 @@ function ClientsPage() {
       (c.phone ?? "").toLowerCase().includes(s),
     );
   }, [data, q]);
+  const totalClients = data?.length ?? 0;
+  const isSearching = q.trim().length > 0;
 
   const exportCSV = () => {
     const rows = filtered.map((c) => ({
@@ -67,6 +74,7 @@ function ClientsPage() {
       Батьки: c.parent_name,
       Телефон: c.phone ?? "",
       "Дата народження": c.child_birthdate ?? "",
+      "Особливість": c.attention_label ?? "",
       Відвідувань: c.stats.count,
       "Витрачено, UAH": c.stats.total,
       "Перший візит": c.stats.first ?? "",
@@ -107,7 +115,14 @@ function ClientsPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h1 className="text-2xl font-semibold md:text-3xl">Клієнти</h1>
-          <p className="text-sm text-muted-foreground">Картки клієнтів створюються автоматично з бронювань</p>
+          <p className="text-sm text-muted-foreground">
+            Усього клієнтів: <span className="font-medium text-foreground">{totalClients}</span>
+            {isSearching && (
+              <>
+                {" · "}знайдено: <span className="font-medium text-foreground">{filtered.length}</span>
+              </>
+            )}
+          </p>
         </div>
         <Button variant="outline" onClick={exportCSV}><Download className="mr-1 h-4 w-4" />Експорт CSV</Button>
       </div>
@@ -175,6 +190,10 @@ function ClientsPage() {
                     {c.child_birthdate && (
                       <div className="text-xs text-muted-foreground">нар. {formatDate(c.child_birthdate)}</div>
                     )}
+                    <div className="flex flex-wrap gap-1">
+                      <BirthdayBadge birthdate={c.child_birthdate} />
+                      <AttentionBadge label={c.attention_label} />
+                    </div>
                   </TableCell>
                   <TableCell>{c.parent_name}</TableCell>
                   <TableCell>{c.phone ?? "—"}</TableCell>
@@ -230,6 +249,7 @@ type ClientWithStats = {
   phone: string | null;
   photo_url: string | null;
   child_birthdate: string | null;
+  attention_label: string | null;
   stats: {
     count: number;
     total: number;
@@ -237,3 +257,14 @@ type ClientWithStats = {
     last?: string;
   };
 };
+
+function AttentionBadge({ label }: { label?: string | null }) {
+  if (!label?.trim()) return null;
+
+  return (
+    <Badge className="mt-1 inline-flex max-w-[220px] items-center gap-1 border border-red-200 bg-red-50 text-red-800 hover:bg-red-50">
+      <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+      <span className="truncate">{label}</span>
+    </Badge>
+  );
+}

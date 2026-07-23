@@ -141,7 +141,7 @@ const HeroSection = () => {
               <path d="M5 25C15 15 25 35 35 25C45 15 55 35 65 25C75 15 85 35 95 25" stroke="hsl(var(--warm-yellow))" strokeWidth="8" strokeLinecap="round" fill="none" />
             </svg>
           </div>
-          ДИТЯЧИЙ ПРОСТІР <br /> МОНТЕРОССОРІ
+          ДИТЯЧИЙ ПРОСТІР <br /> МОНТЕССОРІ
         </motion.h1>
 
         {/* Scroll arrow - more prominent */}

@@ -14,7 +14,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, ClipboardList, History, LayoutDashboard, Settings, Users, LogOut } from "lucide-react";
+import { CalendarDays, ClipboardList, History, LayoutDashboard, ReceiptText, Settings, Users, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import logoImg from "@/assets/l.png";
 
@@ -31,6 +31,7 @@ const NAV = [
   { to: "/dashboard", label: "Дашборд", icon: LayoutDashboard },
   { to: "/bookings", label: "Бронювання", icon: CalendarDays },
   { to: "/clients", label: "Клієнти", icon: Users },
+  { to: "/receipts", label: "Чеки", icon: ReceiptText },
   { to: "/instructions", label: "Інструкції", icon: ClipboardList },
   { to: "/audit", label: "Історія", icon: History },
   { to: "/settings", label: "Налаштування", icon: Settings },

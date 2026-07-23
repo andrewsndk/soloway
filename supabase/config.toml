@@ -6,5 +6,8 @@ verify_jwt = true
 [functions.format-visit-note]
 verify_jwt = true
 
+[functions.generate-solo-insight]
+verify_jwt = true
+
 [functions.booking-healthcheck]
 verify_jwt = false

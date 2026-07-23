@@ -3,10 +3,11 @@ import { motion } from "framer-motion";
 import { Calendar } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { Calendar as CalendarIcon, Clock, Phone, User, Send } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, MessageSquareText, Phone, User, Send } from "lucide-react";
 import { format } from "date-fns";
 import { uk } from "date-fns/locale";
 
@@ -28,6 +29,23 @@ const childAgeOptions = ["1 рік", "2 роки", "3 роки", "4 роки", "
 
 const selectClassName =
   "w-full rounded-xl border-2 border-stone-100 h-12 focus:border-primary px-4 bg-white text-foreground font-medium outline-none cursor-pointer";
+
+const phonePrefix = "+380";
+
+const normalizeLandingPhone = (value: string) => {
+  const digits = value.replace(/\D/g, "");
+  let localDigits = digits;
+
+  if (localDigits.startsWith("380")) {
+    localDigits = localDigits.slice(3);
+  } else if (localDigits.startsWith("80")) {
+    localDigits = localDigits.slice(2);
+  } else if (localDigits.startsWith("0")) {
+    localDigits = localDigits.slice(1);
+  }
+
+  return `${phonePrefix}${localDigits.slice(0, 9)}`;
+};
 
 interface TimeWheelPickerProps {
   slots: string[];
@@ -114,13 +132,13 @@ const BookingSection = () => {
   const [date, setDate] = useState<Date | undefined>(getDefaultBookingDate);
   const [selectedTime, setSelectedTime] = useState<string>(timeSlots[0]);
   const [selectedProgram, setSelectedProgram] = useState<string>("Цілий день");
-  const [customHours, setCustomHours] = useState("");
   const [name, setName] = useState("");
   const [lastName, setLastName] = useState("");
   const [isNannyBooking, setIsNannyBooking] = useState(false);
   const [childName, setChildName] = useState("");
   const [childAge, setChildAge] = useState(childAgeOptions[0]);
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(phonePrefix);
+  const [parentComment, setParentComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -133,8 +151,7 @@ const BookingSection = () => {
       !lastName ||
       !childName ||
       !childAge ||
-      !phone ||
-      (selectedProgram === "Своя кількість годин" && !customHours)
+      normalizeLandingPhone(phone).length !== 13
     ) {
       toast.error("Будь ласка, заповніть усі поля");
       return;
@@ -175,11 +192,12 @@ const BookingSection = () => {
           isNannyBooking,
           childName,
           childAge,
-          phone,
+          phone: normalizeLandingPhone(phone),
           visitDate,
           visitDateIso,
           visitTime: selectedTime,
-          program: selectedProgram === "Своя кількість годин" ? `Своя кількість годин (${customHours})` : selectedProgram
+          program: selectedProgram,
+          parentComment,
         }),
       });
 
@@ -190,8 +208,8 @@ const BookingSection = () => {
         setIsNannyBooking(false);
         setChildName("");
         setChildAge(childAgeOptions[0]);
-        setPhone("");
-        setCustomHours("");
+        setPhone(phonePrefix);
+        setParentComment("");
         setSelectedTime(timeSlots[0]);
         setSelectedProgram("Цілий день");
       } else {
@@ -284,31 +302,12 @@ const BookingSection = () => {
                       onChange={(e) => setSelectedProgram(e.target.value)}
                       className={selectClassName}
                     >
-                      <option value="Цілий день">Цілий день (1390 грн)</option>
                       <option value="Адаптація">Адаптація (300 грн)</option>
-                      <option value="На 3 години">На 3 години (850 грн)</option>
                       <option value="На 1 годину">На 1 годину (500 грн)</option>
-                      <option value="Своя кількість годин">Своя кількість годин</option>
+                      <option value="На 3 години">На 3 години (850 грн)</option>
+                      <option value="Цілий день">Цілий день (1390 грн)</option>
                     </select>
                   </div>
-                  {selectedProgram === "Своя кількість годин" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="customHours" className="flex items-center gap-2 text-sm font-bold ml-2">
-                        <span className="text-secondary font-bold">⏰</span> Вкажіть кількість годин
-                      </Label>
-                      <Input
-                        id="customHours"
-                        type="number"
-                        min="1"
-                        max="24"
-                        placeholder="Наприклад: 5"
-                        value={customHours}
-                        onChange={(e) => setCustomHours(e.target.value)}
-                        className="rounded-xl border-2 border-stone-100 h-12 focus:border-secondary px-4"
-                        required
-                      />
-                    </div>
-                  )}
                   <div className="space-y-2">
                     <Label htmlFor="name" className="flex items-center gap-2 text-sm font-bold ml-2">
                       <User className="w-4 h-4 text-primary" /> Ваше ім'я
@@ -384,11 +383,25 @@ const BookingSection = () => {
                     <Input
                       id="phone"
                       type="tel"
-                      placeholder="+380 99 000 00 00"
+                      placeholder="+380XXXXXXXXX"
                       value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
+                      onChange={(e) => setPhone(normalizeLandingPhone(e.target.value))}
+                      onFocus={() => setPhone((current) => current || phonePrefix)}
                       className="rounded-xl border-2 border-stone-100 h-12 focus:border-primary px-4"
                       required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="parentComment" className="flex items-center gap-2 text-sm font-bold ml-2">
+                      <MessageSquareText className="w-4 h-4 text-secondary" /> Коментар від батьків
+                      <span className="font-medium text-muted-foreground">(необов'язково)</span>
+                    </Label>
+                    <Textarea
+                      id="parentComment"
+                      placeholder="Наприклад: дитина вперше залишається без мами, є улюблена іграшка або важлива деталь"
+                      value={parentComment}
+                      onChange={(e) => setParentComment(e.target.value)}
+                      className="min-h-[96px] rounded-xl border-2 border-stone-100 bg-white px-4 py-3 focus:border-secondary"
                     />
                   </div>
                 </div>

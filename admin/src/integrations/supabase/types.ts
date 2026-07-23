@@ -91,9 +91,11 @@ export type Database = {
           hours: number | null
           id: string
           parent_comment: string | null
+          parent_summary: string | null
           parent_name: string
           payment_status: string
           phone: string | null
+          phone_normalized: string | null
           source: string | null
           status: string
           teacher_comment: string | null
@@ -114,9 +116,11 @@ export type Database = {
           hours?: number | null
           id?: string
           parent_comment?: string | null
+          parent_summary?: string | null
           parent_name: string
           payment_status?: string
           phone?: string | null
+          phone_normalized?: string | null
           source?: string | null
           status?: string
           teacher_comment?: string | null
@@ -137,9 +141,11 @@ export type Database = {
           hours?: number | null
           id?: string
           parent_comment?: string | null
+          parent_summary?: string | null
           parent_name?: string
           payment_status?: string
           phone?: string | null
+          phone_normalized?: string | null
           source?: string | null
           status?: string
           teacher_comment?: string | null
@@ -160,47 +166,166 @@ export type Database = {
       clients: {
         Row: {
           admin_comment: string | null
+          adaptation_notes: string | null
+          attention_label: string | null
           child_birthdate: string | null
           child_name: string
+          calming_notes: string | null
           created_at: string
+          food_allergies: string | null
+          hygiene_notes: string | null
           id: string
+          important_notes: string | null
+          interests: string | null
+          other_allergies: string | null
           parent_name: string
           parent_questionnaire: string | null
+          photo_consent: string | null
           photo_url: string | null
+          physical_restrictions: string | null
+          preferred_name: string | null
           phone: string | null
+          phone_normalized: string | null
+          snack_consent: string | null
           teacher_comment: string | null
+          toilet_habits: string | null
           updated_at: string
           who_can_pickup: string | null
         }
         Insert: {
           admin_comment?: string | null
+          adaptation_notes?: string | null
+          attention_label?: string | null
           child_birthdate?: string | null
           child_name: string
+          calming_notes?: string | null
           created_at?: string
+          food_allergies?: string | null
+          hygiene_notes?: string | null
           id?: string
+          important_notes?: string | null
+          interests?: string | null
+          other_allergies?: string | null
           parent_name: string
           parent_questionnaire?: string | null
+          photo_consent?: string | null
           photo_url?: string | null
+          physical_restrictions?: string | null
+          preferred_name?: string | null
           phone?: string | null
+          phone_normalized?: string | null
+          snack_consent?: string | null
           teacher_comment?: string | null
+          toilet_habits?: string | null
           updated_at?: string
           who_can_pickup?: string | null
         }
         Update: {
           admin_comment?: string | null
+          adaptation_notes?: string | null
+          attention_label?: string | null
           child_birthdate?: string | null
           child_name?: string
+          calming_notes?: string | null
           created_at?: string
+          food_allergies?: string | null
+          hygiene_notes?: string | null
           id?: string
+          important_notes?: string | null
+          interests?: string | null
+          other_allergies?: string | null
           parent_name?: string
           parent_questionnaire?: string | null
+          photo_consent?: string | null
           photo_url?: string | null
+          physical_restrictions?: string | null
+          preferred_name?: string | null
           phone?: string | null
+          phone_normalized?: string | null
+          snack_consent?: string | null
           teacher_comment?: string | null
+          toilet_habits?: string | null
           updated_at?: string
           who_can_pickup?: string | null
         }
         Relationships: []
+      }
+      expense_receipts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+          receipt_date: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          receipt_date: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          receipt_date?: string
+        }
+        Relationships: []
+      }
+      solo_insights: {
+        Row: {
+          activity: string
+          ask: string
+          client_id: string
+          generated_at: string
+          remember: string
+          source_booking_ids: string[]
+          source_hash: string
+          updated_at: string
+          watch_out: string
+        }
+        Insert: {
+          activity: string
+          ask: string
+          client_id: string
+          generated_at?: string
+          remember: string
+          source_booking_ids?: string[]
+          source_hash: string
+          updated_at?: string
+          watch_out: string
+        }
+        Update: {
+          activity?: string
+          ask?: string
+          client_id?: string
+          generated_at?: string
+          remember?: string
+          source_booking_ids?: string[]
+          source_hash?: string
+          updated_at?: string
+          watch_out?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "solo_insights_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

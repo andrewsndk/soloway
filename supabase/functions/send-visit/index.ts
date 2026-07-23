@@ -282,31 +282,32 @@ Deno.serve(async (request) => {
       }
     }
 
-    const { data: phoneMatches, error: phoneLookupError } = await supabase
+    const { data: nameMatches, error: nameLookupError } = await supabase
       .from("clients")
       .select("id")
-      .eq("phone_normalized", phoneNormalized)
+      .ilike("parent_name", parentName)
+      .ilike("child_name", childName)
       .limit(1);
 
-    if (phoneLookupError) {
-      throw phoneLookupError;
+    if (nameLookupError) {
+      throw nameLookupError;
     }
 
-    let clientId = phoneMatches?.[0]?.id as string | undefined;
+    let clientId = nameMatches?.[0]?.id as string | undefined;
 
-    if (!clientId) {
-      const { data: nameMatches, error: nameLookupError } = await supabase
+    if (!clientId && phoneNormalized) {
+      const { data: phoneChildMatches, error: phoneLookupError } = await supabase
         .from("clients")
         .select("id")
-        .ilike("parent_name", parentName)
+        .eq("phone_normalized", phoneNormalized)
         .ilike("child_name", childName)
         .limit(1);
 
-      if (nameLookupError) {
-        throw nameLookupError;
+      if (phoneLookupError) {
+        throw phoneLookupError;
       }
 
-      clientId = nameMatches?.[0]?.id as string | undefined;
+      clientId = phoneChildMatches?.[0]?.id as string | undefined;
     }
 
     if (!clientId) {
