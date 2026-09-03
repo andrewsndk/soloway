@@ -4,6 +4,7 @@ import type { Json } from "@/integrations/supabase/types";
 export type Tariffs = {
   hour_1: number;
   hour_3: number;
+  half_day: number;
   full_day: number;
   adaptation: number;
   extra_per_hour: number;
@@ -479,6 +480,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   tariffs: {
     hour_1: 500,
     hour_3: 850,
+    half_day: 1090,
     full_day: 1390,
     adaptation: 300,
     extra_per_hour: 500,
@@ -487,6 +489,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   formats: [
     { key: "hour_1", label: "На 1 годину" },
     { key: "hour_3", label: "На 3 години" },
+    { key: "half_day", label: "Півдоби (5 годин)" },
     { key: "full_day", label: "Цілий день" },
     { key: "adaptation", label: "Адаптація" },
     { key: "other", label: "Інша кількість годин" },
@@ -521,8 +524,16 @@ export async function fetchSettings(): Promise<AppSettings> {
   return {
     ...DEFAULT_SETTINGS,
     ...saved,
+    tariffs: { ...DEFAULT_SETTINGS.tariffs, ...(saved.tariffs ?? {}) },
+    formats: ensureFormats(saved.formats),
     statuses: ensureStatuses(saved.statuses),
   };
+}
+
+function ensureFormats(formats?: FormatOption[]) {
+  const existing = formats ?? [];
+  const missing = DEFAULT_SETTINGS.formats.filter((format) => !existing.some((item) => item.key === format.key));
+  return [...existing, ...missing];
 }
 
 export async function saveSettings(s: AppSettings): Promise<void> {

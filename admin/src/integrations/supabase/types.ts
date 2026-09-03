@@ -90,6 +90,7 @@ export type Database = {
           format: string
           hours: number | null
           id: string
+          lunch_status: string | null
           parent_comment: string | null
           parent_summary: string | null
           parent_name: string
@@ -97,6 +98,8 @@ export type Database = {
           phone: string | null
           phone_normalized: string | null
           source: string | null
+          subscription_id: string | null
+          subscription_plan: string | null
           status: string
           teacher_comment: string | null
           updated_at: string
@@ -115,6 +118,7 @@ export type Database = {
           format: string
           hours?: number | null
           id?: string
+          lunch_status?: string | null
           parent_comment?: string | null
           parent_summary?: string | null
           parent_name: string
@@ -122,6 +126,8 @@ export type Database = {
           phone?: string | null
           phone_normalized?: string | null
           source?: string | null
+          subscription_id?: string | null
+          subscription_plan?: string | null
           status?: string
           teacher_comment?: string | null
           updated_at?: string
@@ -140,6 +146,7 @@ export type Database = {
           format?: string
           hours?: number | null
           id?: string
+          lunch_status?: string | null
           parent_comment?: string | null
           parent_summary?: string | null
           parent_name?: string
@@ -147,6 +154,8 @@ export type Database = {
           phone?: string | null
           phone_normalized?: string | null
           source?: string | null
+          subscription_id?: string | null
+          subscription_plan?: string | null
           status?: string
           teacher_comment?: string | null
           updated_at?: string
@@ -162,6 +171,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      client_subscriptions: {
+        Row: {
+          id: string
+          client_id: string
+          plan_type: string
+          status: string
+          visits_limit: number | null
+          visits_used: number
+          amount: number
+          starts_at: string | null
+          expires_at: string | null
+          paid_at: string | null
+          activated_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          plan_type: string
+          status?: string
+          visits_limit?: number | null
+          visits_used?: number
+          amount?: number
+          starts_at?: string | null
+          expires_at?: string | null
+          paid_at?: string | null
+          activated_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          plan_type?: string
+          status?: string
+          visits_limit?: number | null
+          visits_used?: number
+          amount?: number
+          starts_at?: string | null
+          expires_at?: string | null
+          paid_at?: string | null
+          activated_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       clients: {
         Row: {
@@ -254,6 +311,7 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          expense_id: string | null
           file_name: string
           file_path: string
           file_size: number | null
@@ -264,6 +322,7 @@ export type Database = {
         Insert: {
           created_at?: string
           created_by?: string | null
+          expense_id?: string | null
           file_name: string
           file_path: string
           file_size?: number | null
@@ -274,12 +333,43 @@ export type Database = {
         Update: {
           created_at?: string
           created_by?: string | null
+          expense_id?: string | null
           file_name?: string
           file_path?: string
           file_size?: number | null
           file_type?: string | null
           id?: string
           receipt_date?: string
+        }
+        Relationships: []
+      }
+      cash_expenses: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          expense_date: string
+          id: string
+          name: string
+          payment_method: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          expense_date: string
+          id?: string
+          name: string
+          payment_method?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          expense_date?: string
+          id?: string
+          name?: string
+          payment_method?: string
         }
         Relationships: []
       }

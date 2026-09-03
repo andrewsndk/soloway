@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ReceiptText, Trash2, Upload } from "lucide-react";
+import { Download, Plus, ReceiptText, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
@@ -10,10 +10,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const BUCKET = "expense-receipts";
 
 type ReceiptRow = Tables<"expense_receipts">;
+type ExpenseRow = Tables<"cash_expenses">;
 
 export const Route = createFileRoute("/_authenticated/receipts")({
   head: () => ({ meta: [{ title: "Чеки — Soloway CRM" }] }),
@@ -22,66 +24,74 @@ export const Route = createFileRoute("/_authenticated/receipts")({
 
 function ReceiptsPage() {
   const qc = useQueryClient();
-  const [receiptDate, setReceiptDate] = useState(today());
   const [file, setFile] = useState<File | null>(null);
+  const [expenseDate, setExpenseDate] = useState(today());
+  const [expenseName, setExpenseName] = useState("");
+  const [expenseAmount, setExpenseAmount] = useState("");
+  const [expensePaymentMethod, setExpensePaymentMethod] = useState<"cash" | "card">("cash");
 
   const { data: receipts = [], isLoading } = useQuery({
     queryKey: ["expense-receipts"],
     queryFn: fetchReceipts,
   });
+  const { data: expenses = [], isLoading: expensesLoading } = useQuery({
+    queryKey: ["cash-expenses"],
+    queryFn: fetchExpenses,
+  });
 
-  const uploadMut = useMutation({
+  const expenseMut = useMutation({
     mutationFn: async () => {
-      if (!receiptDate) throw new Error("Оберіть дату чека");
-      if (!file) throw new Error("Оберіть файл чека");
-
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
-
-      const userId = userData.user?.id ?? null;
-      const filePath = `${receiptDate}/${Date.now()}-${safeFileName(file.name)}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from(BUCKET)
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          contentType: file.type || "application/octet-stream",
-          upsert: false,
-        });
-
-      if (uploadError) throw uploadError;
-
-      const { data: inserted, error: insertError } = await supabase
-        .from("expense_receipts")
-        .insert({
-          receipt_date: receiptDate,
-          file_path: filePath,
-          file_name: file.name,
-          file_type: file.type || null,
-          file_size: file.size,
-          created_by: userId,
-        })
-        .select("*")
-        .single();
-
-      if (insertError) {
-        await supabase.storage.from(BUCKET).remove([filePath]);
-        throw insertError;
+      const amount = Number(expenseAmount.replace(",", "."));
+      if (!expenseDate || !expenseName.trim() || !Number.isFinite(amount) || amount < 0) {
+        throw new Error("Вкажіть дату, назву та коректну суму витрати");
       }
-
-      await logActionQuietly({
-        action: "create",
-        entityType: "expense_receipt",
-        entityId: inserted.id,
-        entityLabel: inserted.file_name,
-        summary: `Завантажено чек за ${formatDate(inserted.receipt_date)}`,
-        after: inserted,
-      });
+      const { data: userData } = await supabase.auth.getUser();
+      const { data: inserted, error } = await supabase.from("cash_expenses").insert({
+        expense_date: expenseDate,
+        name: expenseName.trim(),
+        amount,
+        payment_method: expensePaymentMethod,
+        created_by: userData.user?.id ?? null,
+      }).select("*").single();
+      if (error) throw error;
+      if (file) {
+        const filePath = `${expenseDate}/${Date.now()}-${safeFileName(file.name)}`;
+        const { error: uploadError } = await supabase.storage.from(BUCKET).upload(filePath, file, {
+          cacheControl: "3600", contentType: file.type || "application/octet-stream", upsert: false,
+        });
+        if (uploadError) throw uploadError;
+        const { error: receiptError } = await supabase.from("expense_receipts").insert({
+          expense_id: inserted.id, receipt_date: expenseDate, file_path: filePath, file_name: file.name,
+          file_type: file.type || null, file_size: file.size, created_by: userData.user?.id ?? null,
+        });
+        if (receiptError) {
+          await supabase.storage.from(BUCKET).remove([filePath]);
+          throw receiptError;
+        }
+      }
+      await logActionQuietly({ action: "create", entityType: "expense_receipt", entityId: inserted.id, entityLabel: inserted.name, summary: `Додано витрату за ${formatDate(inserted.expense_date)}`, after: inserted });
     },
     onSuccess: () => {
-      toast.success("Чек завантажено");
+      toast.success("Витрату додано");
+      setExpenseName("");
+      setExpenseAmount("");
       setFile(null);
+      qc.invalidateQueries({ queryKey: ["cash-expenses"] });
       qc.invalidateQueries({ queryKey: ["expense-receipts"] });
+      qc.invalidateQueries({ queryKey: ["cash-expenses-dashboard"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const deleteExpenseMut = useMutation({
+    mutationFn: async (expense: ExpenseRow) => {
+      const { error } = await supabase.from("cash_expenses").delete().eq("id", expense.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Витрату видалено");
+      qc.invalidateQueries({ queryKey: ["cash-expenses"] });
+      qc.invalidateQueries({ queryKey: ["cash-expenses-dashboard"] });
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -125,43 +135,28 @@ function ReceiptsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold md:text-3xl">Чеки</h1>
-        <p className="text-sm text-muted-foreground">Зберігайте фото або PDF чеків по витратах</p>
+        <h1 className="text-2xl font-semibold md:text-3xl">Витрати</h1>
+        <p className="text-sm text-muted-foreground">Один запис витрати враховується в касі та PDF-звіті. Чек можна додати як підтвердження.</p>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Додати чек</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-[220px_1fr_auto] md:items-end">
-          <div className="space-y-1.5">
-            <Label htmlFor="receipt-date">Дата чека</Label>
-            <Input
-              id="receipt-date"
-              type="date"
-              value={receiptDate}
-              onChange={(event) => setReceiptDate(event.target.value)}
-            />
+        <CardHeader><CardTitle>Витрати та каса</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-[170px_minmax(0,1fr)_140px_150px_auto] md:items-end">
+            <div className="space-y-1.5"><Label htmlFor="expense-date">Дата</Label><Input id="expense-date" type="date" value={expenseDate} onChange={(event) => setExpenseDate(event.target.value)} /></div>
+            <div className="space-y-1.5"><Label htmlFor="expense-name">На що</Label><Input id="expense-name" value={expenseName} onChange={(event) => setExpenseName(event.target.value)} placeholder="Наприклад: господарські товари" /></div>
+            <div className="space-y-1.5"><Label htmlFor="expense-amount">Сума, ₴</Label><Input id="expense-amount" value={expenseAmount} onChange={(event) => setExpenseAmount(event.target.value)} inputMode="decimal" placeholder="450" /></div>
+            <div className="space-y-1.5"><Label>Оплата</Label><Select value={expensePaymentMethod} onValueChange={(value) => setExpensePaymentMethod(value as "cash" | "card")}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Готівка</SelectItem><SelectItem value="card">Картка</SelectItem></SelectContent></Select></div>
+            <div className="space-y-1.5"><Label htmlFor="expense-file">Чек (необов’язково)</Label><Input id="expense-file" type="file" accept="image/png,image/jpeg,image/webp,application/pdf" onChange={(event) => setFile(event.target.files?.[0] ?? null)} /></div>
+            <Button onClick={() => expenseMut.mutate()} disabled={expenseMut.isPending}><Plus className="mr-1 h-4 w-4" />{expenseMut.isPending ? "Збереження..." : "Додати витрату"}</Button>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="receipt-file">Файл</Label>
-            <Input
-              id="receipt-file"
-              type="file"
-              accept="image/png,image/jpeg,image/webp,application/pdf"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
-            />
-          </div>
-          <Button onClick={() => uploadMut.mutate()} disabled={uploadMut.isPending}>
-            <Upload className="mr-1 h-4 w-4" />
-            {uploadMut.isPending ? "Завантаження..." : "Завантажити"}
-          </Button>
+          {expensesLoading ? <p className="text-sm text-muted-foreground">Завантаження...</p> : expenses.length === 0 ? <p className="text-sm text-muted-foreground">Витрати ще не додані.</p> : <div className="space-y-2">{expenses.map((expense) => <div key={expense.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3"><div><span className="font-medium">{expense.name}</span><span className="ml-2 text-sm text-muted-foreground">{formatDate(expense.expense_date)} · {expense.payment_method === "card" ? "Картка" : "Готівка"}</span></div><div className="flex items-center gap-3"><span className="font-semibold">{formatUAH(expense.amount)}</span><Button variant="ghost" size="icon" onClick={() => deleteExpenseMut.mutate(expense)} disabled={deleteExpenseMut.isPending} title="Видалити витрату"><Trash2 className="h-4 w-4 text-destructive" /></Button></div></div>)}</div>}
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Збережені чеки</CardTitle>
+          <CardTitle>Підтвердження витрат</CardTitle>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -169,7 +164,7 @@ function ReceiptsPage() {
           ) : receipts.length === 0 ? (
             <div className="rounded-2xl border border-dashed p-8 text-center text-muted-foreground">
               <ReceiptText className="mx-auto mb-3 h-9 w-9" />
-              <p>Поки немає завантажених чеків</p>
+              <p>Поки немає доданих підтверджень</p>
             </div>
           ) : (
             <div className="space-y-5">
@@ -229,6 +224,16 @@ async function fetchReceipts() {
 
   if (error) throw error;
   return data ?? [];
+}
+
+async function fetchExpenses() {
+  const { data, error } = await supabase.from("cash_expenses").select("*").order("expense_date", { ascending: false }).order("created_at", { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+function formatUAH(value: number | null | undefined) {
+  return `${Math.round(Number(value || 0)).toLocaleString("uk-UA")} ₴`;
 }
 
 async function openReceipt(receipt: ReceiptRow) {

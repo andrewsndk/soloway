@@ -23,8 +23,11 @@ import { CheckoutTimeDialog } from "@/components/CheckoutTimeDialog";
 import { VisitNoteEditor } from "@/components/VisitNoteEditor";
 import { BirthdayBadge } from "@/components/BirthdayBadge";
 import { SoloAssistantButton } from "@/components/SoloAssistant";
+import { SubscriptionPanel } from "@/components/SubscriptionPanel";
+import { LunchStatusQuickSelect, LunchStatusSelect } from "@/components/LunchStatus";
+import type { LunchStatus } from "@/lib/lunch";
 import { PAYMENT_STATUSES, statusAfterPaymentChange } from "@/lib/payment";
-import { actualStayMinutes, bookingStartDateTime, calcActualAmountByTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
+import { actualStayMinutes, bookingStartDateTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
 import { formatLabel, fetchSettings } from "@/lib/settings";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
 import { downloadDashboardStatsPdf } from "@/lib/dashboard-report-pdf";
@@ -108,6 +111,17 @@ function DashboardPage() {
       return data ?? [];
     },
   });
+  const { data: cashExpenses = [] } = useQuery({
+    queryKey: ["cash-expenses-dashboard"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("cash_expenses")
+        .select("id, expense_date, name, amount, payment_method")
+        .order("expense_date", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
   const [bookingOpen, setBookingOpen] = useState(false);
   const [clientDialogId, setClientDialogId] = useState<string | null>(null);
@@ -115,6 +129,7 @@ function DashboardPage() {
   const [completionBooking, setCompletionBooking] = useState<BookingRow | null>(null);
   const [completionComment, setCompletionComment] = useState("");
   const [completionParentSummary, setCompletionParentSummary] = useState("");
+  const [completionLunchStatus, setCompletionLunchStatus] = useState<LunchStatus | "">("");
   const [timeDialog, setTimeDialog] = useState<{ booking: BookingRow; mode: "check-in" | "check-out"; defaultTime: string } | null>(null);
   const [statsRangeMode, setStatsRangeMode] = useState<StatsRangeMode>("week");
   const [customStatsFrom, setCustomStatsFrom] = useState(() => localDate());
@@ -153,6 +168,7 @@ function DashboardPage() {
     const unpaid = allBookings.filter((booking) =>
       booking.status !== "Скасовано" &&
       booking.status !== "Не прийшли" &&
+      Number(booking.amount ?? 0) > 0 &&
       booking.payment_status === "не оплачено"
     );
     const noPhone = allBookings.filter((booking) => !booking.phone?.trim());
@@ -193,6 +209,18 @@ function DashboardPage() {
     [allBookings, statsRange.end, statsRange.start, statsRangeInvalid],
   );
   const periodMoney = moneyStats(periodBookings);
+  const periodExpenses = useMemo(
+    () => statsRangeInvalid ? [] : cashExpenses
+      .filter((expense) => expense.expense_date >= statsRange.start && expense.expense_date <= statsRange.end)
+      .map((expense) => ({
+        name: expense.name,
+        amount: Number(expense.amount) || 0,
+        paymentMethod: expense.payment_method === "card" ? "card" as const : "cash" as const,
+      })),
+    [cashExpenses, statsRange.end, statsRange.start, statsRangeInvalid],
+  );
+  const periodCashExpenses = sum(periodExpenses.filter((expense) => expense.paymentMethod === "cash").map((expense) => expense.amount));
+  const periodCashBalance = periodMoney.cash - periodCashExpenses;
   const periodVisits = visitStats(periodBookings);
   const periodStatusSummary = useMemo(() => statusSummary(periodBookings), [periodBookings]);
   const periodDays = useMemo(
@@ -255,23 +283,27 @@ function DashboardPage() {
       status,
       teacher_comment,
       parent_summary,
+      lunch_status,
     }: {
       booking: BookingRow;
       status: string;
       teacher_comment?: string;
       parent_summary?: string;
+      lunch_status?: LunchStatus;
     }) => {
       const comment = teacher_comment?.trim();
       const summary = parent_summary?.trim();
       if (status === "Завершено" && !comment && !booking.teacher_comment?.trim()) {
         throw new Error("Для завершеного візиту додайте короткий коментар: що робила дитина і що її захопило");
       }
+      if (status === "Завершено" && !lunch_status) throw new Error("Вкажіть статус додаткового обіду");
 
       const { data: before } = await supabase.from("bookings").select("*").eq("id", booking.id).maybeSingle();
       const payload = {
         status,
         ...(status === "Завершено" && comment ? { teacher_comment: comment } : {}),
         ...(status === "Завершено" && summary ? { parent_summary: summary } : {}),
+        ...(status === "Завершено" ? { lunch_status } : {}),
       };
       const { data: updated, error } = await supabase
         .from("bookings")
@@ -298,6 +330,7 @@ function DashboardPage() {
       setCompletionBooking(null);
       setCompletionComment("");
       setCompletionParentSummary("");
+      setCompletionLunchStatus("");
       qc.invalidateQueries({ queryKey: ["bookings"] });
       qc.invalidateQueries({ queryKey: ["client-bookings"] });
       qc.invalidateQueries({ queryKey: ["audit-logs-dashboard"] });
@@ -353,10 +386,11 @@ function DashboardPage() {
 
   const changeStatus = (booking: BookingRow, status: string) => {
     if (status === booking.status) return;
-    if (status === "Завершено" && !booking.teacher_comment?.trim()) {
+    if (status === "Завершено") {
       setCompletionBooking(booking);
       setCompletionComment(booking.teacher_comment ?? "");
       setCompletionParentSummary(booking.parent_summary ?? "");
+      setCompletionLunchStatus((booking.lunch_status as LunchStatus) ?? "");
       return;
     }
     statusMut.mutate({ booking, status });
@@ -415,6 +449,10 @@ function DashboardPage() {
         paymentMethod: expense.paymentMethod,
       }))
       .filter((expense) => expense.name || expense.amount > 0);
+    const cashExpenses = sum([
+      ...periodExpenses.filter((expense) => expense.paymentMethod === "cash").map((expense) => expense.amount),
+      ...expenses.filter((expense) => expense.paymentMethod === "cash").map((expense) => expense.amount),
+    ]);
 
     try {
       await downloadDashboardStatsPdf({
@@ -425,7 +463,8 @@ function DashboardPage() {
         money: periodMoney,
         days: periodDays,
         statuses: periodStatusSummary,
-        expenses,
+        expenses: [...periodExpenses, ...expenses],
+        cashBalance: periodMoney.cash - cashExpenses,
       });
       setStatsPdfOpen(false);
       toast.success("PDF звіт сформовано");
@@ -487,6 +526,7 @@ function DashboardPage() {
                     checkPending={checkMut.isPending}
                     onPaymentChange={(payment_status) => paymentMut.mutate({ booking, payment_status })}
                     onStatusChange={(status) => changeStatus(booking, status)}
+                    onLunchStatusChange={(lunch_status) => statusMut.mutate({ booking, status: booking.status, lunch_status })}
                     onCheckIn={() => openVisitTimeDialog(booking, "check-in")}
                     onCheckOut={() => openVisitTimeDialog(booking, "check-out")}
                     onOpenClient={() => openClient(booking.client_id)}
@@ -507,7 +547,7 @@ function DashboardPage() {
               </Card>
 
               <Card>
-                <CardHeader><CardTitle>Быстрые действия</CardTitle></CardHeader>
+                <CardHeader><CardTitle>Швидкі дії</CardTitle></CardHeader>
                 <CardContent className="grid gap-2">
                   <Button variant="outline" asChild className="justify-start">
                     <Link to="/instructions"><ClipboardList className="mr-2 h-4 w-4" />Інструкції для команди</Link>
@@ -761,8 +801,10 @@ function DashboardPage() {
         booking={completionBooking}
         comment={completionComment}
         parentSummary={completionParentSummary}
+        lunchStatus={completionLunchStatus}
         onCommentChange={setCompletionComment}
         onParentSummaryChange={setCompletionParentSummary}
+        onLunchStatusChange={setCompletionLunchStatus}
         onOpenChange={(open) => {
           if (!open && !statusMut.isPending) {
             setCompletionBooking(null);
@@ -777,6 +819,7 @@ function DashboardPage() {
             status: "Завершено",
             teacher_comment: completionComment,
             parent_summary: completionParentSummary,
+            lunch_status: completionLunchStatus as LunchStatus,
           });
         }}
         pending={statusMut.isPending}
@@ -801,6 +844,7 @@ function DashboardPage() {
         onExpensesChange={setStatsPdfExpenses}
         onSubmit={downloadStatsPdf}
         received={periodMoney.received}
+        savedExpenses={periodExpenses}
       />
     </div>
   );
@@ -830,6 +874,9 @@ type BookingRow = {
   parent_comment: string | null;
   teacher_comment: string | null;
   parent_summary: string | null;
+  lunch_status?: string | null;
+  subscription_id?: string | null;
+  subscription_plan?: string | null;
   status: string;
 };
 
@@ -847,6 +894,7 @@ function StatsPdfDialog({
   onExpensesChange,
   onSubmit,
   received,
+  savedExpenses,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -854,8 +902,9 @@ function StatsPdfDialog({
   onExpensesChange: (expenses: ReportExpenseDraft[]) => void;
   onSubmit: () => void;
   received: number;
+  savedExpenses: Array<{ name: string; amount: number; paymentMethod: ExpensePaymentMethod }>;
 }) {
-  const expensesTotal = expenses.reduce((total, expense) => total + (Number(String(expense.amount).replace(",", ".")) || 0), 0);
+  const expensesTotal = [...savedExpenses, ...expenses].reduce((total, expense) => total + (Number(String(expense.amount).replace(",", ".")) || 0), 0);
 
   const updateExpense = (id: string, patch: Partial<ReportExpenseDraft>) => {
     onExpensesChange(expenses.map((expense) => expense.id === id ? { ...expense, ...patch } : expense));
@@ -872,7 +921,7 @@ function StatsPdfDialog({
         <DialogHeader>
           <DialogTitle>PDF звіт з витратами</DialogTitle>
           <DialogDescription>
-            Додайте витрати за обраний період. Вони потраплять тільки в цей PDF і не будуть збережені в CRM.
+            Збережені витрати за період автоматично потраплять у звіт. Нові рядки нижче додаються лише до цього PDF.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
@@ -966,6 +1015,7 @@ function BookingWorkRow({
   checkPending,
   onPaymentChange,
   onStatusChange,
+  onLunchStatusChange,
   onCheckIn,
   onCheckOut,
   onOpenClient,
@@ -979,6 +1029,7 @@ function BookingWorkRow({
   checkPending: boolean;
   onPaymentChange: (value: string) => void;
   onStatusChange: (value: string) => void;
+  onLunchStatusChange: (value: LunchStatus) => void;
   onCheckIn: () => void;
   onCheckOut: () => void;
   onOpenClient: () => void;
@@ -986,7 +1037,6 @@ function BookingWorkRow({
   const checkInAt = booking.check_in_at ?? bookingStartDateTime(booking.visit_date, booking.visit_time);
   const minutes = actualStayMinutes(checkInAt, booking.check_out_at);
   const extraDue = settings ? calcExtraDue(booking.amount, booking.format, checkInAt, booking.check_out_at, settings) : 0;
-  const actualAmount = settings ? calcActualAmountByTime(booking.format, checkInAt, booking.check_out_at, settings) : null;
 
   return (
     <div className="rounded-md border p-3">
@@ -1002,9 +1052,11 @@ function BookingWorkRow({
             <BirthdayBadge birthdate={childBirthdate} />
             <AttentionBadge label={attentionLabel} />
           </div>
+          {booking.status === "Завершено" ? <LunchStatusQuickSelect value={booking.lunch_status as LunchStatus | null} onChange={onLunchStatusChange} /> : null}
           <div className="mt-1 break-words text-sm text-muted-foreground">
             {booking.parent_name} · {booking.phone || "без телефону"} · {settings ? formatLabel(settings.formats, booking.format) : booking.format}
           </div>
+          {booking.client_id ? <SubscriptionPanel clientId={booking.client_id} compact /> : null}
           <div className="mt-1 text-sm font-medium">{formatUAH(booking.amount)}</div>
         </div>
         <CheckInOutControls
@@ -1013,7 +1065,6 @@ function BookingWorkRow({
           checkInAt={checkInAt}
           minutes={minutes}
           extraDue={extraDue}
-          actualAmount={actualAmount}
           onCheckIn={onCheckIn}
           onCheckOut={onCheckOut}
         />
@@ -1030,7 +1081,6 @@ function CheckInOutControls({
   checkInAt,
   minutes,
   extraDue,
-  actualAmount,
   onCheckIn,
   onCheckOut,
 }: {
@@ -1039,7 +1089,6 @@ function CheckInOutControls({
   checkInAt: string | null;
   minutes: number | null;
   extraDue: number;
-  actualAmount: number | null;
   onCheckIn: () => void;
   onCheckOut: () => void;
 }) {
@@ -1067,9 +1116,6 @@ function CheckInOutControls({
         )}
         {extraDue > 0 && (
           <Badge variant="destructive">Доплата {formatUAH(extraDue)}</Badge>
-        )}
-        {actualAmount != null && extraDue === 0 && (
-          <Badge variant="secondary">Факт {formatUAH(actualAmount)}</Badge>
         )}
       </div>
     </div>
@@ -1185,8 +1231,10 @@ function CompletionCommentDialog({
   booking,
   comment,
   parentSummary,
+  lunchStatus,
   onCommentChange,
   onParentSummaryChange,
+  onLunchStatusChange,
   onOpenChange,
   onSubmit,
   pending,
@@ -1194,8 +1242,10 @@ function CompletionCommentDialog({
   booking: BookingRow | null;
   comment: string;
   parentSummary: string;
+  lunchStatus: LunchStatus | "";
   onCommentChange: (value: string) => void;
   onParentSummaryChange: (value: string) => void;
+  onLunchStatusChange: (value: LunchStatus) => void;
   onOpenChange: (open: boolean) => void;
   onSubmit: () => void;
   pending: boolean;
@@ -1211,6 +1261,7 @@ function CompletionCommentDialog({
               : "Напишіть короткий коментар про візит."}
           </DialogDescription>
         </DialogHeader>
+        <LunchStatusSelect value={lunchStatus} onChange={onLunchStatusChange} disabled={pending} />
         <VisitNoteEditor
           rawNote={comment}
           parentSummary={parentSummary}
@@ -1225,7 +1276,7 @@ function CompletionCommentDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             Скасувати
           </Button>
-          <Button onClick={onSubmit} disabled={pending || !comment.trim()}>
+          <Button onClick={onSubmit} disabled={pending || !comment.trim() || !lunchStatus}>
             {pending ? "Збереження..." : "Завершити візит"}
           </Button>
         </DialogFooter>
@@ -1333,6 +1384,7 @@ function moneyStats(bookings: BookingRow[]) {
   const expectedBookings = bookings.filter((booking) =>
     booking.status !== "Скасовано" &&
     booking.status !== "Не прийшли" &&
+    Number(booking.amount ?? 0) > 0 &&
     booking.payment_status === "не оплачено"
   );
   const noShowPaidBookings = paidBookings.filter((booking) => booking.status === "Не прийшли");

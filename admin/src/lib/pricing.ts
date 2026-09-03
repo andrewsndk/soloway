@@ -11,6 +11,8 @@ export function calcAmount(
       return t.hour_1;
     case "hour_3":
       return t.hour_3;
+    case "half_day":
+      return t.half_day;
     case "full_day":
       return t.full_day;
     case "adaptation":
@@ -60,11 +62,10 @@ export function calcActualAmountByTime(
   const minutes = actualStayMinutes(checkInAt, checkOutAt);
   if (!minutes) return null;
   if (format === "full_day") return settings.tariffs.full_day;
+  if (format === "half_day") return settings.tariffs.half_day;
+  if (format === "adaptation") return settings.tariffs.adaptation;
 
   const billedHours = Math.max(1, Math.ceil(minutes / 60));
-  if (format === "adaptation") {
-    return Math.max(settings.tariffs.adaptation, calcAmount("other", billedHours, settings));
-  }
   return calcAmount("other", billedHours, settings);
 }
 

@@ -21,6 +21,9 @@ import { ClientQuestionnaireEditor, ClientQuestionnaireView } from "@/components
 import { VisitSummaryCell } from "@/components/VisitSummaryCell";
 import { BookingDialog } from "@/components/BookingDialog";
 import { BirthdayBadge } from "@/components/BirthdayBadge";
+import { LunchStatusBadge } from "@/components/LunchStatus";
+import { SubscriptionPanel } from "@/components/SubscriptionPanel";
+import { getLatestLunchStatus } from "@/lib/lunch";
 import { SoloAssistantCard } from "@/components/SoloAssistant";
 import { fetchSettings, formatLabel } from "@/lib/settings";
 import { actualStayMinutes, bookingStartDateTime, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
@@ -221,7 +224,8 @@ function ClientPage() {
         <Stat label="Останній візит" value={stats.last ? formatDate(stats.last) : "—"} />
       </div>
 
-      {!editing ? <SoloAssistantCard clientId={client.id} childName={client.child_name} /> : null}
+            {!editing ? <SoloAssistantCard clientId={client.id} childName={client.child_name} /> : null}
+            {!editing ? <SubscriptionPanel clientId={client.id} /> : null}
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-2">
@@ -294,6 +298,7 @@ function ClientPage() {
               <div className="flex flex-wrap gap-2">
                 <BirthdayBadge birthdate={client.child_birthdate} />
                 <AttentionLabel label={client.attention_label} />
+                <LunchStatusBadge status={getLatestLunchStatus(bookings ?? [])} />
               </div>
             )}
             {editing ? (

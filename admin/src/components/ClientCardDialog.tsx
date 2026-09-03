@@ -26,6 +26,9 @@ import { ClientQuestionnaireEditor, ClientQuestionnaireView } from "@/components
 import { VisitSummaryCell } from "@/components/VisitSummaryCell";
 import { BookingDialog } from "@/components/BookingDialog";
 import { BirthdayBadge } from "@/components/BirthdayBadge";
+import { LunchStatusBadge } from "@/components/LunchStatus";
+import { SubscriptionPanel } from "@/components/SubscriptionPanel";
+import { getLatestLunchStatus } from "@/lib/lunch";
 import { SoloAssistantCard } from "@/components/SoloAssistant";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
 import { CLIENT_QUESTIONNAIRE_EMPTY, normalizeQuestionnairePayload, type ClientQuestionnaireKey } from "@/lib/client-questionnaire";
@@ -241,10 +244,12 @@ export function ClientCardDialog({
               <div className="flex flex-wrap gap-2">
                 <BirthdayBadge birthdate={client.child_birthdate} />
                 <AttentionLabel label={client.attention_label} />
+                <LunchStatusBadge status={getLatestLunchStatus(bookings ?? [])} />
               </div>
             )}
 
             {!editing ? <SoloAssistantCard clientId={client.id} childName={client.child_name} /> : null}
+            {!editing ? <SubscriptionPanel clientId={client.id} /> : null}
 
             <div className="grid gap-3 lg:grid-cols-2">
               {editing ? (

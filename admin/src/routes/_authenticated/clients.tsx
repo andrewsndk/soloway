@@ -14,6 +14,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ClientCardDialog } from "@/components/ClientCardDialog";
 import { BirthdayBadge } from "@/components/BirthdayBadge";
+import { LunchStatusBadge, SubscriptionBadge } from "@/components/LunchStatus";
+import type { LunchStatus } from "@/lib/lunch";
 import { downloadCSV } from "@/lib/csv";
 import { formatDate, formatUAH } from "@/lib/pricing";
 import { logActionQuietly } from "@/lib/audit";
@@ -33,13 +35,19 @@ function ClientsPage() {
   const { data } = useQuery({
     queryKey: ["clients-with-stats"],
     queryFn: async () => {
-      const [{ data: clients, error: e1 }, { data: bookings, error: e2 }] = await Promise.all([
+      const [{ data: clients, error: e1 }, { data: bookings, error: e2 }, { data: subscriptions, error: e3 }] = await Promise.all([
         supabase.from("clients").select("*").order("created_at", { ascending: false }),
-        supabase.from("bookings").select("client_id,visit_date,amount,status,payment_status"),
+        supabase.from("bookings").select("client_id,visit_date,visit_time,amount,status,payment_status,lunch_status"),
+        supabase.from("client_subscriptions").select("client_id,plan_type,status,visits_used,visits_limit,expires_at,created_at").in("status", ["pending", "active"]).order("created_at", { ascending: false }),
       ]);
       if (e1) throw e1;
       if (e2) throw e2;
-      const byClient = new Map<string, { count: number; total: number; first?: string; last?: string }>();
+      if (e3) throw e3;
+      const subscriptionByClient = new Map<string, (typeof subscriptions)[number]>();
+      (subscriptions ?? []).forEach((subscription) => {
+        if (!subscriptionByClient.has(subscription.client_id)) subscriptionByClient.set(subscription.client_id, subscription);
+      });
+      const byClient = new Map<string, { count: number; total: number; first?: string; last?: string; lastLunchStatus?: LunchStatus; lastLunchSort?: string }>();
       (bookings ?? []).forEach((b) => {
         if (!b.client_id) return;
         if (b.status === "Скасовано") return;
@@ -50,9 +58,16 @@ function ClientsPage() {
         }
         if (!cur.first || b.visit_date < cur.first) cur.first = b.visit_date;
         if (!cur.last || b.visit_date > cur.last) cur.last = b.visit_date;
+        if (b.status === "Завершено" && (b.lunch_status === "paid" || b.lunch_status === "unpaid")) {
+          const lunchSort = `${b.visit_date}T${b.visit_time ?? "00:00"}`;
+          if (!cur.lastLunchSort || lunchSort > cur.lastLunchSort) {
+            cur.lastLunchSort = lunchSort;
+            cur.lastLunchStatus = b.lunch_status as LunchStatus;
+          }
+        }
         byClient.set(b.client_id, cur);
       });
-      return (clients ?? []).map((c) => ({ ...c, stats: byClient.get(c.id) ?? { count: 0, total: 0 } }));
+      return (clients ?? []).map((c) => ({ ...c, stats: byClient.get(c.id) ?? { count: 0, total: 0 }, subscription: subscriptionByClient.get(c.id) ?? null }));
     },
   });
 
@@ -193,6 +208,8 @@ function ClientsPage() {
                     <div className="flex flex-wrap gap-1">
                       <BirthdayBadge birthdate={c.child_birthdate} />
                       <AttentionBadge label={c.attention_label} />
+                      <LunchStatusBadge status={c.stats.lastLunchStatus} />
+                      <SubscriptionBadge subscription={c.subscription} />
                     </div>
                   </TableCell>
                   <TableCell>{c.parent_name}</TableCell>
@@ -255,7 +272,18 @@ type ClientWithStats = {
     total: number;
     first?: string;
     last?: string;
+    lastLunchStatus?: LunchStatus;
+    lastLunchSort?: string;
   };
+  subscription: {
+    client_id: string;
+    plan_type: string;
+    status: string;
+    visits_used: number;
+    visits_limit: number | null;
+    expires_at: string | null;
+    created_at: string;
+  } | null;
 };
 
 function AttentionBadge({ label }: { label?: string | null }) {

@@ -23,8 +23,11 @@ import { CheckoutTimeDialog } from "@/components/CheckoutTimeDialog";
 import { VisitNoteEditor } from "@/components/VisitNoteEditor";
 import { BirthdayBadge } from "@/components/BirthdayBadge";
 import { SoloAssistantButton } from "@/components/SoloAssistant";
+import { SubscriptionPanel } from "@/components/SubscriptionPanel";
+import { LunchStatusQuickSelect, LunchStatusSelect } from "@/components/LunchStatus";
+import type { LunchStatus } from "@/lib/lunch";
 import { fetchSettings, formatLabel } from "@/lib/settings";
-import { actualStayMinutes, bookingStartDateTime, calcActualAmountByTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
+import { actualStayMinutes, bookingStartDateTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
 import { PAYMENT_STATUSES, statusAfterPaymentChange } from "@/lib/payment";
 import { downloadCSV } from "@/lib/csv";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
@@ -98,6 +101,7 @@ function BookingsPage() {
   const [completionBooking, setCompletionBooking] = useState<BookingRow | null>(null);
   const [completionComment, setCompletionComment] = useState("");
   const [completionParentSummary, setCompletionParentSummary] = useState("");
+  const [completionLunchStatus, setCompletionLunchStatus] = useState<LunchStatus | "">("");
   const [timeDialog, setTimeDialog] = useState<{ booking: BookingRow; mode: "check-in" | "check-out"; defaultTime: string } | null>(null);
   const clientMetaById = useMemo(
     () => new Map((clientLabels ?? []).map((client) => [client.id, client])),
@@ -110,7 +114,7 @@ function BookingsPage() {
       if (formatF !== "all" && b.format !== formatF) return false;
       if (sourceF !== "all" && !sourceMatchesFilter(b.source, sourceF)) return false;
       if (dateF && b.visit_date !== dateF) return false;
-      if (problemF === "unpaid" && (b.status === "Скасовано" || b.status === "Не прийшли" || b.payment_status !== "не оплачено")) return false;
+      if (problemF === "unpaid" && (b.status === "Скасовано" || b.status === "Не прийшли" || Number(b.amount ?? 0) <= 0 || b.payment_status !== "не оплачено")) return false;
       if (problemF === "no-phone" && b.phone?.trim()) return false;
       if (problemF === "completed-without-visit-map" && (b.status !== "Завершено" || b.teacher_comment?.trim())) return false;
       if (q) {
@@ -182,23 +186,27 @@ function BookingsPage() {
       status,
       teacher_comment,
       parent_summary,
+      lunch_status,
     }: {
       booking: BookingRow;
       status: string;
       teacher_comment?: string;
       parent_summary?: string;
+      lunch_status?: LunchStatus;
     }) => {
       const comment = teacher_comment?.trim();
       const summary = parent_summary?.trim();
       if (status === "Завершено" && !comment && !booking.teacher_comment?.trim()) {
         throw new Error("Для завершеного візиту додайте короткий коментар: що робила дитина і що її захопило");
       }
+      if (status === "Завершено" && !lunch_status) throw new Error("Вкажіть статус додаткового обіду");
 
       const { data: before } = await supabase.from("bookings").select("*").eq("id", booking.id).maybeSingle();
       const payload = {
         status,
         ...(status === "Завершено" && comment ? { teacher_comment: comment } : {}),
         ...(status === "Завершено" && summary ? { parent_summary: summary } : {}),
+        ...(status === "Завершено" ? { lunch_status } : {}),
       };
       const { data: updated, error } = await supabase.from("bookings").update(payload).eq("id", booking.id).select("*").single();
       if (error) throw error;
@@ -220,6 +228,7 @@ function BookingsPage() {
       setCompletionBooking(null);
       setCompletionComment("");
       setCompletionParentSummary("");
+      setCompletionLunchStatus("");
       qc.invalidateQueries({ queryKey: ["bookings"] });
       qc.invalidateQueries({ queryKey: ["client-bookings"] });
       qc.invalidateQueries({ queryKey: ["solo-insight"] });
@@ -268,10 +277,11 @@ function BookingsPage() {
 
   const changeStatus = (booking: BookingRow, status: string) => {
     if (status === booking.status) return;
-    if (status === "Завершено" && !booking.teacher_comment?.trim()) {
+    if (status === "Завершено") {
       setCompletionBooking(booking);
       setCompletionComment(booking.teacher_comment ?? "");
       setCompletionParentSummary(booking.parent_summary ?? "");
+      setCompletionLunchStatus((booking.lunch_status as LunchStatus) ?? "");
       return;
     }
     statusMut.mutate({ booking, status });
@@ -409,6 +419,7 @@ function BookingsPage() {
               onCheckOut={() => openVisitTimeDialog(b, "check-out")}
               onPaymentChange={(payment_status) => paymentMut.mutate({ id: b.id, payment_status })}
               onStatusChange={(status) => changeStatus(b, status)}
+              onLunchStatusChange={(lunch_status) => statusMut.mutate({ booking: b, status: b.status, lunch_status })}
               onEdit={() => {
                 setEditing(b as never);
                 setOpen(true);
@@ -451,8 +462,10 @@ function BookingsPage() {
         booking={completionBooking}
         comment={completionComment}
         parentSummary={completionParentSummary}
+        lunchStatus={completionLunchStatus}
         onCommentChange={setCompletionComment}
         onParentSummaryChange={setCompletionParentSummary}
+        onLunchStatusChange={setCompletionLunchStatus}
         onOpenChange={(open) => {
           if (!open && !statusMut.isPending) {
             setCompletionBooking(null);
@@ -467,6 +480,7 @@ function BookingsPage() {
             status: "Завершено",
             teacher_comment: completionComment,
             parent_summary: completionParentSummary,
+            lunch_status: completionLunchStatus as LunchStatus,
           });
         }}
         pending={statusMut.isPending}
@@ -508,6 +522,9 @@ type BookingRow = {
   parent_comment: string | null;
   teacher_comment: string | null;
   parent_summary: string | null;
+  lunch_status?: string | null;
+  subscription_id?: string | null;
+  subscription_plan?: string | null;
   status: string;
 };
 
@@ -538,6 +555,7 @@ function BookingListRow({
   onCheckOut,
   onPaymentChange,
   onStatusChange,
+  onLunchStatusChange,
   onEdit,
   onDelete,
 }: {
@@ -551,6 +569,7 @@ function BookingListRow({
   onCheckOut: () => void;
   onPaymentChange: (value: string) => void;
   onStatusChange: (value: string) => void;
+  onLunchStatusChange: (value: LunchStatus) => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -577,9 +596,11 @@ function BookingListRow({
             <BirthdayBadge birthdate={childBirthdate} />
             <AttentionBadge label={attentionLabel} />
           </div>
+          {booking.status === "Завершено" ? <LunchStatusQuickSelect value={booking.lunch_status as LunchStatus | null} onChange={onLunchStatusChange} /> : null}
           <div className="mt-1 break-words text-sm text-muted-foreground">
             {booking.parent_name} · {booking.phone || "без телефону"}
           </div>
+          {booking.client_id ? <SubscriptionPanel clientId={booking.client_id} compact /> : null}
         </div>
 
         <div className="min-w-0 text-sm">
@@ -760,7 +781,6 @@ function CheckVisitCell({
   const checkInAt = booking.check_in_at ?? bookingStartDateTime(booking.visit_date, booking.visit_time);
   const minutes = actualStayMinutes(checkInAt, booking.check_out_at);
   const extraDue = settings ? calcExtraDue(booking.amount, booking.format, checkInAt, booking.check_out_at, settings) : 0;
-  const actualAmount = settings ? calcActualAmountByTime(booking.format, checkInAt, booking.check_out_at, settings) : null;
 
   return (
     <div className="min-w-0 space-y-1.5 rounded-md bg-muted/30 p-2 text-xs">
@@ -778,11 +798,7 @@ function CheckVisitCell({
         {checkInAt && booking.check_out_at && (
           <Badge variant="secondary">{formatDuration(minutes)}</Badge>
         )}
-        {extraDue > 0 ? (
-          <Badge variant="destructive">Доплата {formatUAH(extraDue)}</Badge>
-        ) : actualAmount != null ? (
-          <Badge variant="secondary">Факт {formatUAH(actualAmount)}</Badge>
-        ) : null}
+        {extraDue > 0 ? <Badge variant="destructive">Доплата {formatUAH(extraDue)}</Badge> : null}
       </div>
     </div>
   );
@@ -845,8 +861,10 @@ function CompletionCommentDialog({
   booking,
   comment,
   parentSummary,
+  lunchStatus,
   onCommentChange,
   onParentSummaryChange,
+  onLunchStatusChange,
   onOpenChange,
   onSubmit,
   pending,
@@ -854,8 +872,10 @@ function CompletionCommentDialog({
   booking: BookingRow | null;
   comment: string;
   parentSummary: string;
+  lunchStatus: LunchStatus | "";
   onCommentChange: (value: string) => void;
   onParentSummaryChange: (value: string) => void;
+  onLunchStatusChange: (value: LunchStatus) => void;
   onOpenChange: (open: boolean) => void;
   onSubmit: () => void;
   pending: boolean;
@@ -871,6 +891,7 @@ function CompletionCommentDialog({
               : "Напишіть короткий коментар про візит."}
           </DialogDescription>
         </DialogHeader>
+        <LunchStatusSelect value={lunchStatus} onChange={onLunchStatusChange} disabled={pending} />
         <VisitNoteEditor
           rawNote={comment}
           parentSummary={parentSummary}
@@ -885,7 +906,7 @@ function CompletionCommentDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={pending}>
             Скасувати
           </Button>
-          <Button onClick={onSubmit} disabled={pending || !comment.trim()}>
+          <Button onClick={onSubmit} disabled={pending || !comment.trim() || !lunchStatus}>
             {pending ? "Збереження..." : "Завершити візит"}
           </Button>
         </DialogFooter>

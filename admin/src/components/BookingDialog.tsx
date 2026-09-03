@@ -31,6 +31,9 @@ import { BirthdayBadge } from "@/components/BirthdayBadge";
 import { SoloAssistantCard } from "@/components/SoloAssistant";
 import { Banknote, CircleAlert, CreditCard, X } from "lucide-react";
 import { toast } from "sonner";
+import { LunchStatusSelect } from "@/components/LunchStatus";
+import type { LunchStatus } from "@/lib/lunch";
+import { getSubscriptionPlan, SUBSCRIPTION_PLANS, subscriptionStartFromBookingDate, type SubscriptionPlan } from "@/lib/subscriptions";
 
 const visibleBookingFormats = (settings: AppSettings) => settings.formats;
 
@@ -111,6 +114,9 @@ type BookingDraft = {
   parent_comment: string;
   teacher_comment: string;
   status: string;
+  lunch_status: LunchStatus | "";
+  subscription_id?: string | null;
+  subscription_plan: SubscriptionPlan | "";
 };
 
 const emptyDraft: BookingDraft = {
@@ -132,6 +138,9 @@ const emptyDraft: BookingDraft = {
   parent_comment: "",
   teacher_comment: "",
   status: "Нове",
+  lunch_status: "",
+  subscription_id: null,
+  subscription_plan: "",
 };
 
 export function BookingDialog({
@@ -160,9 +169,25 @@ export function BookingDialog({
     enabled: open,
   });
   const [draft, setDraft] = useState<BookingDraft>(emptyDraft);
+  const [ignoredSubscriptionId, setIgnoredSubscriptionId] = useState<string | null>(null);
+  const { data: openSubscription } = useQuery({
+    queryKey: ["booking-dialog-subscription", draft.client_id],
+    enabled: open && Boolean(draft.client_id),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("client_subscriptions")
+        .select("id,plan_type,status,visits_used,visits_limit,expires_at")
+        .eq("client_id", draft.client_id!)
+        .in("status", ["pending", "active"])
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
 
   useEffect(() => {
     if (open) {
+      setIgnoredSubscriptionId(null);
       const nextDraft = { ...emptyDraft, ...defaults, ...initial } as BookingDraft;
       const parsedSource = splitSource(nextDraft.source);
       const custom_end_time = nextDraft.format === "other"
@@ -172,6 +197,20 @@ export function BookingDialog({
     }
   }, [open, initial, defaults]);
 
+  useEffect(() => {
+    if (!open || draft.id || draft.subscription_id || !openSubscription || ignoredSubscriptionId === openSubscription.id) return;
+    const plan = getSubscriptionPlan(openSubscription.plan_type);
+    if (!plan) return;
+    setDraft((current) => ({
+      ...current,
+      subscription_id: openSubscription.id,
+      subscription_plan: plan.key,
+      format: plan.format,
+      amount: "0",
+      amount_override: false,
+    }));
+  }, [draft.id, draft.subscription_id, ignoredSubscriptionId, open, openSubscription]);
+
   const customDurationHours = useMemo(
     () => durationHoursFromTimes(draft.visit_time, draft.custom_end_time),
     [draft.visit_time, draft.custom_end_time],
@@ -179,8 +218,9 @@ export function BookingDialog({
 
   const computedAmount = useMemo(() => {
     if (!settings) return 0;
+    if (draft.subscription_plan) return getSubscriptionPlan(draft.subscription_plan)?.amount ?? 0;
     return calcAmount(draft.format, draft.format === "other" ? customDurationHours : null, settings);
-  }, [customDurationHours, draft.format, settings]);
+  }, [customDurationHours, draft.format, settings, draft.subscription_plan]);
 
   const selectedClient = useMemo(
     () => clients?.find((client) => client.id === draft.client_id) ?? null,
@@ -249,6 +289,9 @@ export function BookingDialog({
       if (draft.status === "Завершено" && !draft.teacher_comment.trim()) {
         throw new Error("Для завершеного візиту додайте короткий коментар: що робила дитина і що її захопило");
       }
+      if (draft.status === "Завершено" && !draft.lunch_status) {
+        throw new Error("Вкажіть, чи брали дитині додатковий обід і чи він оплачений");
+      }
 
       let clientId: string | null = null;
       const parent = draft.parent_name.trim();
@@ -302,6 +345,48 @@ export function BookingDialog({
         }
       }
 
+      let subscriptionId = draft.subscription_id ?? null;
+      let createdSubscriptionId: string | null = null;
+      let bookingFormat = draft.format;
+      let bookingAmount = Number(draft.amount) || 0;
+      if (draft.subscription_plan) {
+        const plan = getSubscriptionPlan(draft.subscription_plan);
+        if (!plan || !clientId) throw new Error("Оберіть дитину для абонемента");
+        bookingFormat = plan.format;
+        if (subscriptionId) {
+          const { data: linkedSubscription, error: linkedError } = await supabase
+            .from("client_subscriptions")
+            .select("id,plan_type,status")
+            .eq("id", subscriptionId)
+            .single();
+          if (linkedError) throw linkedError;
+          if (linkedSubscription.plan_type !== plan.key) throw new Error("Тип бронювання не відповідає абонементу");
+          bookingAmount = draft.id ? Number(draft.amount) || 0 : 0;
+        } else {
+          bookingAmount = plan.amount;
+          const { data: existing, error: existingError } = await supabase
+            .from("client_subscriptions")
+            .select("id,plan_type")
+            .eq("client_id", clientId)
+            .in("status", ["pending", "active"])
+            .maybeSingle();
+          if (existingError) throw existingError;
+          if (existing) {
+            if (existing.plan_type !== plan.key) throw new Error("У дитини вже є інший активний абонемент");
+            subscriptionId = existing.id;
+            bookingAmount = 0;
+          } else {
+            const { data: createdSubscription, error: subscriptionError } = await supabase
+              .from("client_subscriptions")
+              .insert({ client_id: clientId, plan_type: plan.key, visits_limit: plan.visitsLimit, amount: plan.amount, starts_at: subscriptionStartFromBookingDate(draft.visit_date) })
+              .select("id")
+              .single();
+            if (subscriptionError) throw subscriptionError;
+            subscriptionId = createdSubscription.id;
+            createdSubscriptionId = createdSubscription.id;
+          }
+        }
+      }
       const nextStatus = statusAfterPaymentChange(draft.status, draft.payment_status);
       const source = isOtherSource(draft.source)
         ? `${draft.source}: ${draft.source_detail.trim()}`
@@ -312,44 +397,58 @@ export function BookingDialog({
         child_name: child,
         phone: phone || null,
         phone_normalized: phoneNormalized || null,
-        format: draft.format,
-        hours: draft.format === "other" ? customDurationHours : null,
+        format: bookingFormat,
+        hours: bookingFormat === "other" ? customDurationHours : null,
         visit_date: draft.visit_date,
         visit_time: draft.visit_time || null,
         source: source || null,
         extra_services: draft.extra_services,
-        amount: Number(draft.amount) || 0,
+        amount: bookingAmount,
         amount_override: draft.amount_override,
         payment_status: draft.payment_status,
         parent_comment: draft.parent_comment || null,
         teacher_comment: draft.teacher_comment || null,
         status: nextStatus,
+        lunch_status: nextStatus === "Завершено" ? draft.lunch_status : null,
+        subscription_id: subscriptionId,
+        subscription_plan: draft.subscription_plan || null,
       };
 
-      if (draft.id) {
-        const { data: before } = await supabase.from("bookings").select("*").eq("id", draft.id).maybeSingle();
-        const { data: updated, error } = await supabase.from("bookings").update(payload).eq("id", draft.id).select("*").single();
-        if (error) throw error;
-        await logActionQuietly({
-          action: "update",
-          entityType: "booking",
-          entityId: draft.id,
-          entityLabel: `${child} · ${draft.visit_date}`,
-          summary: `Оновлено бронювання для ${child} на ${draft.visit_date}`,
-          before: before ? compactDiff(before, updated) : null,
-          after: updated,
-        });
-      } else {
-        const { data: created, error } = await supabase.from("bookings").insert(payload).select("*").single();
-        if (error) throw error;
-        await logActionQuietly({
-          action: "create",
-          entityType: "booking",
-          entityId: created.id,
-          entityLabel: `${child} · ${draft.visit_date}`,
-          summary: `Створено бронювання для ${child} на ${draft.visit_date}`,
-          after: created,
-        });
+      try {
+        if (draft.id) {
+          const { data: before } = await supabase.from("bookings").select("*").eq("id", draft.id).maybeSingle();
+          const { data: updated, error } = await supabase.from("bookings").update(payload).eq("id", draft.id).select("*").single();
+          if (error) throw error;
+          await logActionQuietly({
+            action: "update",
+            entityType: "booking",
+            entityId: draft.id,
+            entityLabel: `${child} · ${draft.visit_date}`,
+            summary: `Оновлено бронювання для ${child} на ${draft.visit_date}`,
+            before: before ? compactDiff(before, updated) : null,
+            after: updated,
+          });
+        } else {
+          const { data: created, error } = await supabase.from("bookings").insert(payload).select("*").single();
+          if (error) throw error;
+          await logActionQuietly({
+            action: "create",
+            entityType: "booking",
+            entityId: created.id,
+            entityLabel: `${child} · ${draft.visit_date}`,
+            summary: `Створено бронювання для ${child} на ${draft.visit_date}`,
+            after: created,
+          });
+        }
+      } catch (error) {
+        if (createdSubscriptionId) {
+          await supabase
+            .from("client_subscriptions")
+            .delete()
+            .eq("id", createdSubscriptionId)
+            .eq("status", "pending");
+        }
+        throw error;
       }
     },
     onSuccess: () => {
@@ -449,12 +548,37 @@ export function BookingDialog({
             </Field>
           ) : null}
           <Field label="Формат відвідування">
-            <Select value={draft.format} onValueChange={(v) => setDraft({ ...draft, format: v })}>
+            <Select value={draft.subscription_plan ? `subscription:${draft.subscription_plan}` : draft.format} onValueChange={(value) => {
+              const linkedValue = draft.subscription_plan ? `subscription:${draft.subscription_plan}` : null;
+              if (draft.id && draft.subscription_id && value !== linkedValue) {
+                toast.error("Активований абонемент не можна відв’язати через редагування бронювання");
+                return;
+              }
+              if (!draft.id && draft.subscription_id && value !== linkedValue) {
+                const confirmed = window.confirm("У дитини є активний абонемент. Створити цей візит без списання з абонемента?");
+                if (!confirmed) return;
+                setIgnoredSubscriptionId(draft.subscription_id);
+              }
+              const subscriptionKey = value.startsWith("subscription:") ? value.slice("subscription:".length) : null;
+              const plan = subscriptionKey ? getSubscriptionPlan(subscriptionKey) : null;
+              if (plan) {
+                setIgnoredSubscriptionId(null);
+                setDraft({ ...draft, subscription_plan: plan.key, subscription_id: draft.subscription_id, format: plan.format, amount: String(plan.amount), amount_override: false });
+              } else {
+                setDraft({ ...draft, format: value, subscription_plan: "", subscription_id: null });
+              }
+            }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {visibleBookingFormats(settings).map((f) => <SelectItem key={f.key} value={f.key}>{bookingFormatLabel(f)}</SelectItem>)}
+                {SUBSCRIPTION_PLANS.map((plan) => <SelectItem key={plan.key} value={`subscription:${plan.key}`}>{plan.label} · {plan.amount} ₴</SelectItem>)}
               </SelectContent>
             </Select>
+            {openSubscription && draft.subscription_id === openSubscription.id ? (
+              <p className="text-xs text-violet-700">
+                Активний абонемент: {openSubscription.visits_used}/{openSubscription.visits_limit ?? "∞"}. Після завершення буде списано один візит.
+              </p>
+            ) : null}
           </Field>
           {draft.format === "other" ? (
             <Field label="Кастомний час *">
@@ -488,7 +612,7 @@ export function BookingDialog({
             </Field>
           ) : null}
           <Field label="Статус">
-            <Select value={draft.status} onValueChange={(v) => setDraft({ ...draft, status: v })}>
+            <Select value={draft.status} onValueChange={(v) => setDraft({ ...draft, status: v, lunch_status: v === "Завершено" ? draft.lunch_status : "" })}>
               <SelectTrigger className={`border ${statusStyle(draft.status).trigger}`}>
                 <StatusLabel status={draft.status} />
               </SelectTrigger>
@@ -501,6 +625,9 @@ export function BookingDialog({
               </SelectContent>
             </Select>
           </Field>
+          {draft.status === "Завершено" ? (
+            <LunchStatusSelect value={draft.lunch_status} onChange={(lunch_status) => setDraft({ ...draft, lunch_status })} />
+          ) : null}
           <Field label={`Сума чеку, ₴ ${draft.amount_override ? "(вручну)" : "(авто)"}`}>
             <div className="flex items-center gap-2">
               <Input

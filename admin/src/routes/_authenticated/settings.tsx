@@ -87,6 +87,7 @@ function SettingsPage() {
         <CardContent className="grid gap-4 md:grid-cols-2">
           <Tariff label="На 1 годину, ₴" value={s.tariffs.hour_1} onChange={(v) => setTariff("hour_1", v)} />
           <Tariff label="На 3 години, ₴" value={s.tariffs.hour_3} onChange={(v) => setTariff("hour_3", v)} />
+          <Tariff label="Півдоби (5 годин), ₴" value={s.tariffs.half_day} onChange={(v) => setTariff("half_day", v)} />
           <Tariff label="Повний день, ₴" value={s.tariffs.full_day} onChange={(v) => setTariff("full_day", v)} />
           <Tariff label="Адаптація, ₴" value={s.tariffs.adaptation} onChange={(v) => setTariff("adaptation", v)} />
           <Tariff label="Інша к-ть годин: тариф за годину (до 3-х), ₴" value={s.tariffs.extra_per_hour} onChange={(v) => setTariff("extra_per_hour", v)} />

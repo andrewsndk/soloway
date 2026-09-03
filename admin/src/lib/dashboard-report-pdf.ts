@@ -42,6 +42,7 @@ export type DashboardStatsPdfInput = {
   days: ReportDay[];
   statuses: ReportStatus[];
   expenses: ReportExpense[];
+  cashBalance: number;
 };
 
 const pageWidthPx = 1240;
@@ -122,6 +123,7 @@ async function drawReportCanvas(input: DashboardStatsPdfInput) {
   y = drawSectionTitle(ctx, "Оплата", y + 26);
   y = drawMetricGrid(ctx, y, [
     ["Готівка", formatUAH(input.money.cash), "Оплачено готівкою"],
+    ["Залишок у касі", formatUAH(input.cashBalance), "Готівка мінус витрати"],
     ["Картка", formatUAH(input.money.card), "Оплачено карткою"],
     ["Витрати готівкою", formatUAH(cashExpenses), "Додаткові витрати"],
     ["Витрати карткою", formatUAH(cardExpenses), "Додаткові витрати"],
