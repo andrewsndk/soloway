@@ -326,7 +326,7 @@ function BookingsPage() {
       Дитина: b.child_name,
       Телефон: b.phone ?? "",
       Формат: settings ? formatLabel(settings.formats, b.format) : b.format,
-      Годин: b.hours ?? "",
+      Годин: b.format === "half_day" ? 6 : b.hours ?? "",
       Джерело: b.source ?? "",
       Послуги: (b.extra_services ?? []).join("; "),
       Сума: b.amount,
@@ -335,7 +335,7 @@ function BookingsPage() {
       "Чек-ін": b.check_in_at ?? bookingStartDateTime(b.visit_date, b.visit_time) ?? "",
       "Чек-аут": b.check_out_at ?? "",
       "Фактичний час": formatDuration(actualStayMinutes(b.check_in_at ?? bookingStartDateTime(b.visit_date, b.visit_time), b.check_out_at)),
-      "Доплата": settings ? calcExtraDue(b.amount, b.format, b.check_in_at ?? bookingStartDateTime(b.visit_date, b.visit_time), b.check_out_at, settings) : 0,
+      "Доплата": settings ? calcExtraDue(b.amount, b.format, b.check_in_at ?? bookingStartDateTime(b.visit_date, b.visit_time), b.check_out_at, settings, b) : 0,
     }));
     downloadCSV(`bookings-${new Date().toISOString().slice(0,10)}.csv`, rows);
   };
@@ -780,7 +780,7 @@ function CheckVisitCell({
 }) {
   const checkInAt = booking.check_in_at ?? bookingStartDateTime(booking.visit_date, booking.visit_time);
   const minutes = actualStayMinutes(checkInAt, booking.check_out_at);
-  const extraDue = settings ? calcExtraDue(booking.amount, booking.format, checkInAt, booking.check_out_at, settings) : 0;
+  const extraDue = settings ? calcExtraDue(booking.amount, booking.format, checkInAt, booking.check_out_at, settings, booking) : 0;
 
   return (
     <div className="min-w-0 space-y-1.5 rounded-md bg-muted/30 p-2 text-xs">
@@ -919,6 +919,7 @@ function bookingHours(b: BookingRow): number | null {
   switch (b.format) {
     case "hour_1": return 1;
     case "hour_3": return 3;
+    case "half_day": return 6;
     case "full_day": return 8;
     case "adaptation": return null;
     case "other": return b.hours != null ? Number(b.hours) : null;

@@ -489,7 +489,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   formats: [
     { key: "hour_1", label: "На 1 годину" },
     { key: "hour_3", label: "На 3 години" },
-    { key: "half_day", label: "Півдоби (5 годин)" },
+    { key: "half_day", label: "Півдоби (6 годин)" },
     { key: "full_day", label: "Цілий день" },
     { key: "adaptation", label: "Адаптація" },
     { key: "other", label: "Інша кількість годин" },

@@ -1036,7 +1036,7 @@ function BookingWorkRow({
 }) {
   const checkInAt = booking.check_in_at ?? bookingStartDateTime(booking.visit_date, booking.visit_time);
   const minutes = actualStayMinutes(checkInAt, booking.check_out_at);
-  const extraDue = settings ? calcExtraDue(booking.amount, booking.format, checkInAt, booking.check_out_at, settings) : 0;
+  const extraDue = settings ? calcExtraDue(booking.amount, booking.format, checkInAt, booking.check_out_at, settings, booking) : 0;
 
   return (
     <div className="rounded-md border p-3">

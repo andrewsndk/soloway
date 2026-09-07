@@ -64,6 +64,8 @@ export function calcActualAmountByTime(
   if (format === "full_day") return settings.tariffs.full_day;
   if (format === "half_day") return settings.tariffs.half_day;
   if (format === "adaptation") return settings.tariffs.adaptation;
+  if (format === "hour_1" && minutes <= 60) return settings.tariffs.hour_1;
+  if (format === "hour_3" && minutes <= 180) return settings.tariffs.hour_3;
 
   const billedHours = Math.max(1, Math.ceil(minutes / 60));
   return calcAmount("other", billedHours, settings);
@@ -75,7 +77,10 @@ export function calcExtraDue(
   checkInAt: string | null | undefined,
   checkOutAt: string | null | undefined,
   settings: AppSettings,
+  booking?: { subscription_id?: string | null; amount_override?: boolean; status?: string },
 ): number {
+  // Package payments and an administrator's agreed total must not be repriced.
+  if (booking?.subscription_id || booking?.amount_override || booking?.status === "Скасовано" || booking?.status === "Не прийшли") return 0;
   const actualAmount = calcActualAmountByTime(format, checkInAt, checkOutAt, settings);
   if (actualAmount == null) return 0;
   return Math.max(0, actualAmount - Number(currentAmount ?? 0));

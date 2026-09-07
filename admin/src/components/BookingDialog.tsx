@@ -398,7 +398,7 @@ export function BookingDialog({
         phone: phone || null,
         phone_normalized: phoneNormalized || null,
         format: bookingFormat,
-        hours: bookingFormat === "other" ? customDurationHours : null,
+        hours: bookingFormat === "other" ? customDurationHours : bookingFormat === "half_day" ? 6 : null,
         visit_date: draft.visit_date,
         visit_time: draft.visit_time || null,
         source: source || null,
