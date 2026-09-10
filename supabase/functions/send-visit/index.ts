@@ -20,7 +20,8 @@ type VisitPayload = {
   healthcheck?: unknown;
 };
 
-type BookingFormat = "hour_1" | "hour_3" | "full_day" | "adaptation" | "other";
+type BookingFormat = "hour_1" | "hour_3" | "half_day" | "full_day" | "adaptation" | "other";
+type SubscriptionPlan = "hour_1" | "hour_3" | "half_day" | "full_day" | "unlimited_month";
 
 function jsonResponse(payload: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(payload), {
@@ -58,7 +59,16 @@ function escapeHtml(value: string) {
     .replace(/>/g, "&gt;");
 }
 
-function getProgramDetails(program: string): { format: BookingFormat; hours: number | null; amount: number } {
+function getProgramDetails(program: string): { format: BookingFormat; hours: number | null; amount: number; subscriptionPlan?: SubscriptionPlan } {
+  const subscriptionPrograms: Record<string, { format: BookingFormat; amount: number; plan: SubscriptionPlan }> = {
+    "Абонемент: 1 година": { format: "hour_1", amount: 4200, plan: "hour_1" },
+    "Абонемент: 3 години": { format: "hour_3", amount: 7200, plan: "hour_3" },
+    "Абонемент: Півдоби": { format: "half_day", amount: 9200, plan: "half_day" },
+    "Абонемент: Цілий день": { format: "full_day", amount: 11800, plan: "full_day" },
+    "Абонемент: Безліміт на місяць": { format: "full_day", amount: 29900, plan: "unlimited_month" },
+  };
+  const subscription = subscriptionPrograms[program];
+  if (subscription) return { format: subscription.format, hours: null, amount: subscription.amount, subscriptionPlan: subscription.plan };
   if (program.startsWith("Своя кількість годин")) {
     const hoursMatch = program.match(/\((\d+(?:[.,]\d+)?)\)/);
     const hours = hoursMatch ? Number(hoursMatch[1].replace(",", ".")) : null;
@@ -68,6 +78,8 @@ function getProgramDetails(program: string): { format: BookingFormat; hours: num
   switch (program) {
     case "Цілий день":
       return { format: "full_day", hours: null, amount: 1390 };
+    case "Півдоби":
+      return { format: "half_day", hours: 6, amount: 1090 };
     case "Адаптація":
       return { format: "adaptation", hours: null, amount: 300 };
     case "На 3 години":
@@ -331,6 +343,32 @@ Deno.serve(async (request) => {
       clientId = createdClient.id;
     }
 
+    let subscriptionId: string | null = null;
+    let bookingAmount = programDetails.amount;
+    if (programDetails.subscriptionPlan) {
+      const visitsLimit = programDetails.subscriptionPlan === "unlimited_month" ? null : 10;
+      const { data: existingSubscription, error: existingSubscriptionError } = await supabase
+        .from("client_subscriptions")
+        .select("id,plan_type")
+        .eq("client_id", clientId)
+        .in("status", ["pending", "active"])
+        .maybeSingle();
+      if (existingSubscriptionError) throw existingSubscriptionError;
+      if (existingSubscription) {
+        if (existingSubscription.plan_type !== programDetails.subscriptionPlan) throw new Error("У дитини вже є інший активний абонемент");
+        subscriptionId = existingSubscription.id;
+        bookingAmount = 0;
+      } else {
+        const { data: createdSubscription, error: subscriptionError } = await supabase
+          .from("client_subscriptions")
+          .insert({ client_id: clientId, plan_type: programDetails.subscriptionPlan, visits_limit: visitsLimit, amount: programDetails.amount, starts_at: `${visitDateIso}T00:00:00.000Z` })
+          .select("id")
+          .single();
+        if (subscriptionError) throw subscriptionError;
+        subscriptionId = createdSubscription.id;
+      }
+    }
+
     const { error: bookingError } = await supabase.from("bookings").insert({
       client_id: clientId,
       parent_name: parentName,
@@ -342,9 +380,11 @@ Deno.serve(async (request) => {
       visit_date: visitDateIso,
       visit_time: visitTime,
       source: "Сайт",
-      amount: programDetails.amount,
+      amount: bookingAmount,
       amount_override: false,
       parent_comment: [parentComment, parentQuestionnaire].filter(Boolean).join("\n") || null,
+      subscription_id: subscriptionId,
+      subscription_plan: programDetails.subscriptionPlan ?? null,
       status: "Нове",
     });
 

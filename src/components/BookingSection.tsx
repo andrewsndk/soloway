@@ -144,21 +144,31 @@ const BookingSection = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const formData = new FormData(e.currentTarget as HTMLFormElement);
+    const formName = String(formData.get("name") ?? name).trim();
+    const formLastName = String(formData.get("lastName") ?? lastName).trim();
+    const formChildName = String(formData.get("childName") ?? childName).trim();
+    const formChildAge = String(formData.get("childAge") ?? childAge).trim();
+    const formPhone = String(formData.get("phone") ?? phone).trim();
+    const formProgram = String(formData.get("program") ?? selectedProgram).trim();
+    const formParentComment = String(formData.get("parentComment") ?? parentComment);
+    const normalizedPhone = normalizeLandingPhone(formPhone);
+
     if (
       !date ||
       !selectedTime ||
-      !name ||
-      !lastName ||
-      !childName ||
-      !childAge ||
-      normalizeLandingPhone(phone).length !== 13
+      !formName ||
+      !formLastName ||
+      !formChildName ||
+      !formChildAge ||
+      normalizedPhone.replace(/\D/g, "").length !== 12
     ) {
-      toast.error("Будь ласка, заповніть усі поля");
+      toast.error("Перевірте ім'я, прізвище, ім'я дитини та номер телефону");
       return;
     }
 
-    if (date < minBookingDate) {
-      toast.error("Бронювання доступне з 1 липня 2026 року");
+    if (date < getDefaultBookingDate()) {
+      toast.error("Оберіть сьогоднішню або майбутню дату");
       return;
     }
 
@@ -187,17 +197,17 @@ const BookingSection = () => {
           apikey: supabaseAnonKey,
         },
         body: JSON.stringify({
-          name,
-          lastName,
+          name: formName,
+          lastName: formLastName,
           isNannyBooking,
-          childName,
-          childAge,
-          phone: normalizeLandingPhone(phone),
+          childName: formChildName,
+          childAge: formChildAge,
+          phone: normalizedPhone,
           visitDate,
           visitDateIso,
           visitTime: selectedTime,
-          program: selectedProgram,
-          parentComment,
+          program: formProgram,
+          parentComment: formParentComment,
         }),
       });
 
@@ -262,9 +272,9 @@ const BookingSection = () => {
                   mode="single"
                   selected={date}
                   onSelect={(d) => d && setDate(d)}
-                  disabled={{ before: minBookingDate }}
-                  defaultMonth={minBookingDate}
-                  fromDate={minBookingDate}
+                  disabled={{ before: getDefaultBookingDate() }}
+                  defaultMonth={date}
+                  fromDate={getDefaultBookingDate()}
                   className="rounded-md"
                   locale={uk}
                 />
@@ -298,6 +308,7 @@ const BookingSection = () => {
                     </Label>
                     <select
                       id="program"
+                      name="program"
                       value={selectedProgram}
                       onChange={(e) => setSelectedProgram(e.target.value)}
                       className={selectClassName}
@@ -305,7 +316,13 @@ const BookingSection = () => {
                       <option value="Адаптація">Адаптація (300 грн)</option>
                       <option value="На 1 годину">На 1 годину (500 грн)</option>
                       <option value="На 3 години">На 3 години (850 грн)</option>
+                      <option value="Півдоби">Півдоби, 6 годин (1090 грн)</option>
                       <option value="Цілий день">Цілий день (1390 грн)</option>
+                      <option value="Абонемент: 1 година">Абонемент: 1 година · 10 відвідувань (4200 грн)</option>
+                      <option value="Абонемент: 3 години">Абонемент: 3 години · 10 відвідувань (7200 грн)</option>
+                      <option value="Абонемент: Півдоби">Абонемент: Півдоби · 10 відвідувань (9200 грн)</option>
+                      <option value="Абонемент: Цілий день">Абонемент: Цілий день · 10 відвідувань (11800 грн)</option>
+                      <option value="Абонемент: Безліміт на місяць">Абонемент: Безліміт на 30 днів (29900 грн)</option>
                     </select>
                   </div>
                   <div className="space-y-2">
@@ -314,6 +331,7 @@ const BookingSection = () => {
                     </Label>
                     <Input
                       id="name"
+                      name="name"
                       placeholder="Наприклад: Марія"
                       value={name}
                       onChange={(e) => setName(e.target.value)}
@@ -327,6 +345,7 @@ const BookingSection = () => {
                     </Label>
                     <Input
                       id="lastName"
+                      name="lastName"
                       placeholder="Наприклад: Коваленко"
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
@@ -351,6 +370,7 @@ const BookingSection = () => {
                     </Label>
                     <Input
                       id="childName"
+                      name="childName"
                       placeholder="Наприклад: Олександр"
                       value={childName}
                       onChange={(e) => setChildName(e.target.value)}
@@ -364,6 +384,7 @@ const BookingSection = () => {
                     </Label>
                     <select
                       id="childAge"
+                      name="childAge"
                       value={childAge}
                       onChange={(e) => setChildAge(e.target.value)}
                       className={selectClassName}
@@ -382,6 +403,7 @@ const BookingSection = () => {
                     </Label>
                     <Input
                       id="phone"
+                      name="phone"
                       type="tel"
                       placeholder="+380XXXXXXXXX"
                       value={phone}
@@ -397,6 +419,7 @@ const BookingSection = () => {
                       <span className="font-medium text-muted-foreground">(необов'язково)</span>
                     </Label>
                     <Textarea
+                      name="parentComment"
                       id="parentComment"
                       placeholder="Наприклад: дитина вперше залишається без мами, є улюблена іграшка або важлива деталь"
                       value={parentComment}
