@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import { LunchStatusSelect } from "@/components/LunchStatus";
 import type { LunchStatus } from "@/lib/lunch";
 import { getSubscriptionPlan, SUBSCRIPTION_PLANS, subscriptionStartFromBookingDate, type SubscriptionPlan } from "@/lib/subscriptions";
+import { subscriptionBookingAmount } from "@/lib/subscription-payment";
 
 const visibleBookingFormats = (settings: AppSettings) => settings.formats;
 
@@ -266,10 +267,12 @@ export function BookingDialog({
   }, [customDurationHours, draft.format, draft.hours]);
 
   useEffect(() => {
-    if (!draft.amount_override) {
-      setDraft((d) => ({ ...d, amount: String(computedAmount) }));
-    }
-  }, [computedAmount, draft.amount_override]);
+    if (!settings) return;
+    // A linked booking stores either the package payment or a covered visit (0).
+    setDraft((d) => d.amount_override || d.subscription_id
+      ? d
+      : { ...d, amount: String(computedAmount) });
+  }, [computedAmount, draft.amount_override, settings]);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -361,7 +364,17 @@ export function BookingDialog({
             .single();
           if (linkedError) throw linkedError;
           if (linkedSubscription.plan_type !== plan.key) throw new Error("Тип бронювання не відповідає абонементу");
-          bookingAmount = draft.id ? Number(draft.amount) || 0 : 0;
+          bookingAmount = 0;
+          if (draft.id) {
+            const { data: savedBooking, error: savedError } = await supabase
+              .from("bookings")
+              .select("amount,subscription_id")
+              .eq("id", draft.id)
+              .single();
+            if (savedError) throw savedError;
+            if (savedBooking.subscription_id !== subscriptionId) throw new Error("Бронювання змінилося. Відкрийте його повторно.");
+            bookingAmount = subscriptionBookingAmount(Number(savedBooking.amount), Number(draft.amount), draft.amount_override);
+          }
         } else {
           bookingAmount = plan.amount;
           const { data: existing, error: existingError } = await supabase

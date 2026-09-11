@@ -49,6 +49,10 @@ jobs:
         working-directory: admin
         run: npx tsc --noEmit
 
+      - name: Test admin payment calculations
+        working-directory: admin
+        run: node --experimental-strip-types --test src/lib/pricing.test.mjs src/lib/subscription-payment.test.mjs
+
       - name: Build admin
         working-directory: admin
         run: npm run build

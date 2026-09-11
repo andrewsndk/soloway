@@ -32,6 +32,14 @@ export function SubscriptionPanel({ clientId, compact = false }: { clientId: str
   const activateMut = useMutation({
     mutationFn: async (selectedPaymentMethod: "оплачено готівкою" | "оплачено карткою") => {
       if (!subscription || subscription.status !== "pending") return;
+      const { data: charge, error: chargeError } = await supabase
+        .from("bookings")
+        .select("id")
+        .eq("subscription_id", subscription.id)
+        .gt("amount", 0)
+        .maybeSingle();
+      if (chargeError) throw chargeError;
+      if (!charge) throw new Error("У бронюванні відсутня сума оплати абонемента. Спочатку перевірте оплату пакета.");
       const now = new Date();
       const startAt = subscription.starts_at ?? subscriptionStartFromBookingDate(firstBooking?.visit_date) ?? now.toISOString();
       const { data, error } = await supabase.from("client_subscriptions").update({
