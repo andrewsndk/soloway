@@ -273,7 +273,7 @@ export function BookingDialog({
     setDraft((d) => d.amount_override || d.subscription_id
       ? d
       : { ...d, amount: String(computedAmount) });
-  }, [computedAmount, draft.amount_override, settings]);
+  }, [computedAmount, draft.amount_override, open, settings]);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -352,7 +352,9 @@ export function BookingDialog({
       let subscriptionId = draft.subscription_id ?? null;
       let createdSubscriptionId: string | null = null;
       let bookingFormat = draft.format;
-      let bookingAmount = Number(draft.amount) || 0;
+      let bookingAmount = !draft.id && !draft.amount_override && !draft.subscription_plan
+        ? computedAmount
+        : Number(draft.amount) || 0;
       if (draft.subscription_plan) {
         const plan = getSubscriptionPlan(draft.subscription_plan);
         if (!plan || !clientId) throw new Error("Оберіть дитину для абонемента");
