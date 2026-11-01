@@ -596,18 +596,18 @@ export function BookingDialog({
           {draft.format === "other" ? (
             <Field label="Кастомний час *">
               <div className="grid grid-cols-2 gap-2">
-                <Select value={draft.visit_time} onValueChange={(v) => setDraft({ ...draft, visit_time: v })}>
-                  <SelectTrigger><SelectValue placeholder="З" /></SelectTrigger>
-                  <SelectContent>
-                    {TIME_OPTIONS.slice(0, -1).map((time) => <SelectItem key={time} value={time}>з {time}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Select value={draft.custom_end_time} onValueChange={(v) => setDraft({ ...draft, custom_end_time: v })}>
-                  <SelectTrigger><SelectValue placeholder="До" /></SelectTrigger>
-                  <SelectContent>
-                    {TIME_OPTIONS.slice(1).map((time) => <SelectItem key={time} value={time}>до {time}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Input
+                  type="time"
+                  aria-label="Час початку"
+                  value={draft.visit_time}
+                  onChange={(e) => setDraft({ ...draft, visit_time: e.target.value })}
+                />
+                <Input
+                  type="time"
+                  aria-label="Час завершення"
+                  value={draft.custom_end_time}
+                  onChange={(e) => setDraft({ ...draft, custom_end_time: e.target.value })}
+                />
               </div>
               <p className="text-xs text-muted-foreground">
                 {customDurationHours != null
