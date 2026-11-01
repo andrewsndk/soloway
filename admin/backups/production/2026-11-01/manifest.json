@@ -1,0 +1,30 @@
+{
+  "capturedAt": "2026-11-01T11:02:52.020929Z",
+  "encryption": "AES-256-GCM",
+  "envelope": {
+    "magic": "SOLOWAY_BACKUP_AES256GCM_V1\n",
+    "ivBytes": 12,
+    "authTagBytes": 16,
+    "ciphertext": "remaining bytes"
+  },
+  "file": "soloway-production-20261101.tar.gz.aes256gcm",
+  "bytes": 37520816,
+  "sha256": "236e2668ecfd8a7082132c2e2b1dae55e67c66c23da8dcce37fa49ab920642be",
+  "payloadSha256": "7ad826cb0be89a1133d5bd9fe672c91ae64c5dc119ceaa859e6357a0e150e072",
+  "codeCommit": "2968de8",
+  "supabasePrivateSnapshot": "backup_prod_20261101",
+  "tables": 44,
+  "rows": 5824,
+  "clients": 132,
+  "bookings": 701,
+  "subscriptions": 21,
+  "copiedStorageObjects": 123,
+  "omittedPrivateReceiptBodies": 6,
+  "verification": {
+    "exportCounts": "passed",
+    "aesAuthenticationAndRoundTrip": "passed",
+    "archiveReadability": "passed",
+    "publicSchemaRestore": "passed",
+    "pricingTests": 10
+  }
+}
