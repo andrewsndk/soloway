@@ -17,6 +17,7 @@ import { BirthdayBadge } from "@/components/BirthdayBadge";
 import { LunchStatusBadge, SubscriptionBadge } from "@/components/LunchStatus";
 import type { LunchStatus } from "@/lib/lunch";
 import { downloadCSV } from "@/lib/csv";
+import { canSeeFinance } from '@/lib/finance-access';
 import { formatDate, formatUAH } from "@/lib/pricing";
 import { logActionQuietly } from "@/lib/audit";
 import { AlertTriangle, Download, ImageIcon, Trash2 } from "lucide-react";
@@ -139,7 +140,7 @@ function ClientsPage() {
             )}
           </p>
         </div>
-        <Button variant="outline" onClick={exportCSV}><Download className="mr-1 h-4 w-4" />Експорт CSV</Button>
+        {canSeeFinance() && <Button variant="outline" onClick={exportCSV}><Download className="mr-1 h-4 w-4" />Експорт CSV</Button>}
       </div>
 
       <Card>

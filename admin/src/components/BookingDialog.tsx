@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { canSeeFinance, canSeeVisitAmounts } from '@/lib/finance-access';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -584,7 +585,7 @@ export function BookingDialog({
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {visibleBookingFormats(settings).map((f) => <SelectItem key={f.key} value={f.key}>{bookingFormatLabel(f)}</SelectItem>)}
-                {SUBSCRIPTION_PLANS.map((plan) => <SelectItem key={plan.key} value={`subscription:${plan.key}`}>{plan.label} · {plan.amount} ₴</SelectItem>)}
+                {SUBSCRIPTION_PLANS.map((plan) => <SelectItem key={plan.key} value={`subscription:${plan.key}`}>{plan.label}{canSeeVisitAmounts() ? ` · ${plan.amount} ₴` : ''}</SelectItem>)}
               </SelectContent>
             </Select>
             {openSubscription && draft.subscription_id === openSubscription.id ? (
@@ -644,19 +645,19 @@ export function BookingDialog({
           <Field label={`Сума чеку, ₴ ${draft.amount_override ? "(вручну)" : "(авто)"}`}>
             <div className="flex items-center gap-2">
               <Input
-                type="number"
+                type={canSeeVisitAmounts() ? "number" : "text"}
                 min="0"
-                value={draft.amount}
-                disabled={!draft.amount_override}
+                value={canSeeVisitAmounts() ? draft.amount : '****'}
+                disabled={!canSeeFinance() || !draft.amount_override}
                 onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
               />
-              <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+              {canSeeFinance() && <label className="flex items-center gap-1 text-xs whitespace-nowrap">
                 <Checkbox
                   checked={draft.amount_override}
                   onCheckedChange={(v) => setDraft({ ...draft, amount_override: !!v })}
                 />
                 Вручну
-              </label>
+              </label>}
             </div>
           </Field>
           <Field label="Тип оплати">

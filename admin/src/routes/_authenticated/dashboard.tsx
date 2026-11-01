@@ -26,8 +26,8 @@ import { SoloAssistantButton } from "@/components/SoloAssistant";
 import { SubscriptionPanel } from "@/components/SubscriptionPanel";
 import { LunchStatusQuickSelect, LunchStatusSelect } from "@/components/LunchStatus";
 import type { LunchStatus } from "@/lib/lunch";
-import { PAYMENT_STATUSES, statusAfterPaymentChange } from "@/lib/payment";
-import { actualStayMinutes, bookingStartDateTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
+import { PAYMENT_STATUSES, statusAfterPaymentChange, hasBookingCharge } from "@/lib/payment";
+import { actualStayMinutes, bookingStartDateTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatUAH, formatVisitUAH } from "@/lib/pricing";
 import { formatLabel, fetchSettings } from "@/lib/settings";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
 import { downloadDashboardStatsPdf } from "@/lib/dashboard-report-pdf";
@@ -52,6 +52,7 @@ import {
 } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
+import { useFinanceAccess } from '@/lib/finance-access';
 
 type StatsRangeMode = "day" | "week" | "month" | "custom";
 type ExpensePaymentMethod = "cash" | "card";
@@ -74,6 +75,7 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 function DashboardPage() {
+  const finance = useFinanceAccess();
   const qc = useQueryClient();
   const { data: settings } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
   const { data: bookings } = useQuery({
@@ -113,6 +115,7 @@ function DashboardPage() {
   });
   const { data: cashExpenses = [] } = useQuery({
     queryKey: ["cash-expenses-dashboard"],
+    enabled: finance,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("cash_expenses")
@@ -168,7 +171,7 @@ function DashboardPage() {
     const unpaid = allBookings.filter((booking) =>
       booking.status !== "Скасовано" &&
       booking.status !== "Не прийшли" &&
-      Number(booking.amount ?? 0) > 0 &&
+      hasBookingCharge(booking) &&
       booking.payment_status === "не оплачено"
     );
     const noPhone = allBookings.filter((booking) => !booking.phone?.trim());
@@ -485,16 +488,16 @@ function DashboardPage() {
           <Button onClick={() => setBookingOpen(true)}>
             <Plus className="mr-1 h-4 w-4" />Додати бронювання
           </Button>
-          <Button variant="outline" asChild>
+          {finance && <Button variant="outline" asChild>
             <Link to="/settings"><Download className="mr-1 h-4 w-4" />Експорт</Link>
-          </Button>
+          </Button>}
         </div>
       </div>
 
       <Tabs defaultValue="today" className="space-y-4">
         <TabsList>
           <TabsTrigger value="today">Сьогодні</TabsTrigger>
-          <TabsTrigger value="stats">Статистика</TabsTrigger>
+          {finance && <TabsTrigger value="stats">Статистика</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="today" className="space-y-4">
@@ -552,12 +555,12 @@ function DashboardPage() {
                   <Button variant="outline" asChild className="justify-start">
                     <Link to="/instructions"><ClipboardList className="mr-2 h-4 w-4" />Інструкції для команди</Link>
                   </Button>
-                  <Button variant="outline" asChild className="justify-start">
+                  {finance && <Button variant="outline" asChild className="justify-start">
                     <Link to="/audit"><History className="mr-2 h-4 w-4" />Останні зміни</Link>
-                  </Button>
-                  <Button variant="outline" asChild className="justify-start">
+                  </Button>}
+                  {finance && <Button variant="outline" asChild className="justify-start">
                     <Link to="/settings"><Settings className="mr-2 h-4 w-4" />Бекап і бухгалтерія</Link>
-                  </Button>
+                  </Button>}
                 </CardContent>
               </Card>
             </div>
@@ -608,7 +611,7 @@ function DashboardPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="stats" className="space-y-4">
+        {finance && <TabsContent value="stats" className="space-y-4">
           <Card>
             <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
@@ -792,7 +795,7 @@ function DashboardPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
 
       <BookingDialog open={bookingOpen} onOpenChange={setBookingOpen} />
@@ -1057,7 +1060,7 @@ function BookingWorkRow({
             {booking.parent_name} · {booking.phone || "без телефону"} · {settings ? formatLabel(settings.formats, booking.format) : booking.format}
           </div>
           {booking.client_id ? <SubscriptionPanel clientId={booking.client_id} compact /> : null}
-          <div className="mt-1 text-sm font-medium">{formatUAH(booking.amount)}</div>
+          <div className="mt-1 text-sm font-medium">{formatVisitUAH(booking.amount)}</div>
         </div>
         <CheckInOutControls
           booking={booking}
@@ -1115,7 +1118,7 @@ function CheckInOutControls({
           <Badge variant="secondary">{formatDuration(minutes)}</Badge>
         )}
         {extraDue > 0 && (
-          <Badge variant="destructive">Доплата {formatUAH(extraDue)}</Badge>
+          <Badge variant="destructive">Доплата {formatVisitUAH(extraDue)}</Badge>
         )}
       </div>
     </div>
@@ -1148,7 +1151,7 @@ function CompactBookingRow({
         <StatusLabel status={booking.status} />
       </div>
       <div className="mt-1 text-sm text-muted-foreground">
-        {booking.parent_name} · {settings ? formatLabel(settings.formats, booking.format) : booking.format} · {formatUAH(booking.amount)}
+        {booking.parent_name} · {settings ? formatLabel(settings.formats, booking.format) : booking.format} · {formatVisitUAH(booking.amount)}
       </div>
     </button>
   );

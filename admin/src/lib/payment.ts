@@ -6,6 +6,10 @@ export const PAYMENT_STATUSES = [
 
 export type PaymentStatus = (typeof PAYMENT_STATUSES)[number];
 
+export function hasBookingCharge(booking: { amount?: number | null; has_charge?: boolean }) {
+  return booking.has_charge ?? Number(booking.amount ?? 0) > 0;
+}
+
 export function isPaidPaymentStatus(status?: string | null) {
   return status === "оплачено готівкою" || status === "оплачено карткою";
 }

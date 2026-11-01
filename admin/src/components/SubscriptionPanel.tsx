@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSubscriptionPlan, addThirtyDays, subscriptionLabel, subscriptionStartFromBookingDate } from "@/lib/subscriptions";
-import { formatUAH } from "@/lib/pricing";
+import { formatVisitUAH } from "@/lib/pricing";
 import { toast } from "sonner";
 
 export function SubscriptionPanel({ clientId, compact = false }: { clientId: string; compact?: boolean }) {
@@ -102,7 +102,7 @@ export function SubscriptionPanel({ clientId, compact = false }: { clientId: str
         <div className="flex items-center gap-2 font-medium text-violet-900"><Star className="h-4 w-4" />{label}</div>
         <Badge variant={subscription.status === "active" ? "default" : "secondary"}>{subscription.status === "active" ? "Активний" : "Очікує активації"}</Badge>
       </div>
-      <div className="mt-1 text-sm text-violet-800">{plan.label} · {formatUAH(subscription.amount)}</div>
+      <div className="mt-1 text-sm text-violet-800">{plan.label} · {formatVisitUAH(subscription.amount)}</div>
       {subscription.status === "pending" ? (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Select value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as typeof paymentMethod)}>

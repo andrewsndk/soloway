@@ -1,4 +1,7 @@
+import { requireFinanceAccess } from './finance-access';
+
 export function downloadCSV(filename: string, rows: Array<Record<string, unknown>>): void {
+  requireFinanceAccess();
   if (rows.length === 0) {
     const blob = new Blob(["\uFEFF"], { type: "text/csv;charset=utf-8;" });
     triggerDownload(blob, filename);

@@ -20,7 +20,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { fetchSettings, formatLabel } from "@/lib/settings";
-import { actualStayMinutes, bookingStartDateTime, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
+import { actualStayMinutes, bookingStartDateTime, formatDate, formatDateTime, formatDuration, formatTime, formatUAH, formatVisitUAH } from "@/lib/pricing";
 import { ClientPhotoUpload } from "@/components/ClientPhotoUpload";
 import { ClientQuestionnaireEditor, ClientQuestionnaireView } from "@/components/ClientQuestionnaireSection";
 import { VisitSummaryCell } from "@/components/VisitSummaryCell";
@@ -444,7 +444,7 @@ function VisitHistoryRow({
       </TableCell>
       <TableCell>{settings ? formatLabel(settings.formats, booking.format) : booking.format}</TableCell>
       <TableCell>{booking.hours ?? "—"}</TableCell>
-      <TableCell className="text-right">{formatUAH(booking.amount)}</TableCell>
+      <TableCell className="text-right">{formatVisitUAH(booking.amount)}</TableCell>
       <TableCell><Badge variant={booking.status === "Скасовано" ? "destructive" : "secondary"}>{booking.status}</Badge></TableCell>
       <TableCell>
         <VisitSummaryCell booking={booking} />

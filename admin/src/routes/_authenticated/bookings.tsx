@@ -27,9 +27,10 @@ import { SubscriptionPanel } from "@/components/SubscriptionPanel";
 import { LunchStatusQuickSelect, LunchStatusSelect } from "@/components/LunchStatus";
 import type { LunchStatus } from "@/lib/lunch";
 import { fetchSettings, formatLabel } from "@/lib/settings";
-import { actualStayMinutes, bookingStartDateTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
-import { PAYMENT_STATUSES, statusAfterPaymentChange } from "@/lib/payment";
+import { actualStayMinutes, bookingStartDateTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatVisitUAH } from "@/lib/pricing";
+import { PAYMENT_STATUSES, statusAfterPaymentChange, hasBookingCharge } from "@/lib/payment";
 import { downloadCSV } from "@/lib/csv";
+import { canSeeFinance } from '@/lib/finance-access';
 import { compactDiff, logActionQuietly } from "@/lib/audit";
 import { getBirthdayReminder } from "@/lib/birthday";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -114,7 +115,7 @@ function BookingsPage() {
       if (formatF !== "all" && b.format !== formatF) return false;
       if (sourceF !== "all" && !sourceMatchesFilter(b.source, sourceF)) return false;
       if (dateF && b.visit_date !== dateF) return false;
-      if (problemF === "unpaid" && (b.status === "Скасовано" || b.status === "Не прийшли" || Number(b.amount ?? 0) <= 0 || b.payment_status !== "не оплачено")) return false;
+      if (problemF === "unpaid" && (b.status === "Скасовано" || b.status === "Не прийшли" || !hasBookingCharge(b) || b.payment_status !== "не оплачено")) return false;
       if (problemF === "no-phone" && b.phone?.trim()) return false;
       if (problemF === "completed-without-visit-map" && (b.status !== "Завершено" || b.teacher_comment?.trim())) return false;
       if (q) {
@@ -348,7 +349,7 @@ function BookingsPage() {
           <p className="text-sm text-muted-foreground">Усі візити дітей у вашому просторі</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={exportCSV}><Download className="mr-1 h-4 w-4" />Експорт CSV</Button>
+          {canSeeFinance() && <Button variant="outline" onClick={exportCSV}><Download className="mr-1 h-4 w-4" />Експорт CSV</Button>}
           <Button onClick={() => { setEditing(undefined as never); setOpen(true); }}>
             <Plus className="mr-1 h-4 w-4" />Додати
           </Button>
@@ -609,7 +610,7 @@ function BookingListRow({
             <div className="text-muted-foreground">{booking.hours} год</div>
           ) : null}
           <div className="mt-1 text-muted-foreground">{booking.source || "без джерела"}</div>
-          <div className="mt-2 text-base font-semibold">{formatUAH(booking.amount)}</div>
+          <div className="mt-2 text-base font-semibold">{formatVisitUAH(booking.amount)}</div>
         </div>
 
         <div className="min-w-0 lg:col-span-2 2xl:col-span-1">
@@ -798,7 +799,7 @@ function CheckVisitCell({
         {checkInAt && booking.check_out_at && (
           <Badge variant="secondary">{formatDuration(minutes)}</Badge>
         )}
-        {extraDue > 0 ? <Badge variant="destructive">Доплата {formatUAH(extraDue)}</Badge> : null}
+        {extraDue > 0 ? <Badge variant="destructive">Доплата {formatVisitUAH(extraDue)}</Badge> : null}
       </div>
     </div>
   );

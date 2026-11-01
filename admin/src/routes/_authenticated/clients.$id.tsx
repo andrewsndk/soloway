@@ -26,7 +26,7 @@ import { SubscriptionPanel } from "@/components/SubscriptionPanel";
 import { getLatestLunchStatus } from "@/lib/lunch";
 import { SoloAssistantCard } from "@/components/SoloAssistant";
 import { fetchSettings, formatLabel } from "@/lib/settings";
-import { actualStayMinutes, bookingStartDateTime, formatDate, formatDateTime, formatDuration, formatTime, formatUAH } from "@/lib/pricing";
+import { actualStayMinutes, bookingStartDateTime, formatDate, formatDateTime, formatDuration, formatTime, formatUAH, formatVisitUAH } from "@/lib/pricing";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
 import { CLIENT_QUESTIONNAIRE_EMPTY, normalizeQuestionnairePayload, type ClientQuestionnaireKey } from "@/lib/client-questionnaire";
 import { formatPhoneForUkraineInput, normalizePhone } from "@/lib/phone";
@@ -415,7 +415,7 @@ function VisitHistoryRow({
       </TableCell>
       <TableCell>{settings ? formatLabel(settings.formats, booking.format) : booking.format}</TableCell>
       <TableCell>{booking.hours ?? "—"}</TableCell>
-      <TableCell className="text-right">{formatUAH(booking.amount)}</TableCell>
+      <TableCell className="text-right">{formatVisitUAH(booking.amount)}</TableCell>
       <TableCell><Badge variant={booking.status === "Скасовано" ? "destructive" : "secondary"}>{booking.status}</Badge></TableCell>
       <TableCell>
         <VisitSummaryCell booking={booking} />

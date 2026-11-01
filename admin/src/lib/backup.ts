@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { requireFinanceAccess } from './finance-access';
 import type { Json, Tables } from "@/integrations/supabase/types";
 import { bookingStartDateTime, formatDateTime } from "@/lib/pricing";
 import { DEFAULT_SETTINGS, type AppSettings } from "@/lib/settings";
@@ -425,6 +426,7 @@ function downloadTextFile(filename: string, content: string, type: string) {
 }
 
 function downloadBlob(filename: string, blob: Blob) {
+  requireFinanceAccess();
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

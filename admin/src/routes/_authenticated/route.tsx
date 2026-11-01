@@ -16,6 +16,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { CalendarDays, ClipboardList, History, LayoutDashboard, ReceiptText, Settings, Users, LogOut } from "lucide-react";
 import { toast } from "sonner";
+import { setFinanceUser, useFinanceAccess } from '@/lib/finance-access';
+import { useQueryClient } from '@tanstack/react-query';
 import logoImg from "@/assets/l.png";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -23,6 +25,7 @@ export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async () => {
     const { data } = await supabase.auth.getSession();
     if (!data.session) throw redirect({ to: "/auth" });
+    setFinanceUser(data.session.user.email);
   },
   component: AuthedLayout,
 });
@@ -38,11 +41,15 @@ const NAV = [
 ] as const;
 
 function AuthedLayout() {
+  const finance = useFinanceAccess();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
+    setFinanceUser(null);
+    queryClient.clear();
     toast.success("До зустрічі!");
     navigate({ to: "/auth", replace: true });
   };
@@ -66,7 +73,7 @@ function AuthedLayout() {
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {NAV.map((item) => {
+                  {NAV.filter((item) => finance || !['/receipts', '/settings', '/audit'].includes(item.to)).map((item) => {
                     const active = pathname === item.to || pathname.startsWith(item.to + "/");
                     return (
                       <SidebarMenuItem key={item.to}>

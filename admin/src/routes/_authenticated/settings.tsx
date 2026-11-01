@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { canSeeFinance } from '@/lib/finance-access';
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +14,7 @@ import { Calculator, DatabaseBackup, Download } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/settings")({
+  beforeLoad: () => { if (!canSeeFinance()) throw redirect({ to: '/dashboard' }); },
   head: () => ({ meta: [{ title: "Налаштування — Soloway CRM" }] }),
   component: SettingsPage,
 });

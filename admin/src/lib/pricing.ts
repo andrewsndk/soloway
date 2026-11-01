@@ -1,4 +1,5 @@
 import type { AppSettings } from "./settings";
+import { canSeeFinance, canSeeVisitAmounts } from './finance-access.ts';
 
 export function calcAmount(
   format: string,
@@ -80,6 +81,7 @@ export function calcExtraDue(
   booking?: { subscription_id?: string | null; amount_override?: boolean; status?: string },
 ): number {
   // Package payments and an administrator's agreed total must not be repriced.
+  if (currentAmount == null) return 0;
   if (booking?.subscription_id || booking?.amount_override || booking?.status === "Скасовано" || booking?.status === "Не прийшли") return 0;
   const actualAmount = calcActualAmountByTime(format, checkInAt, checkOutAt, settings);
   if (actualAmount == null) return 0;
@@ -87,8 +89,15 @@ export function calcExtraDue(
 }
 
 export function formatUAH(n: number | null | undefined): string {
+  if (!canSeeFinance()) return '****';
   const v = Number(n ?? 0);
   return `${v.toLocaleString("uk-UA")} ₴`;
+}
+
+export function formatVisitUAH(n: number | null | undefined): string {
+  if (!canSeeVisitAmounts()) return '****';
+  if (n == null) return '—';
+  return `${Number(n).toLocaleString('uk-UA')} ₴`;
 }
 
 export function formatDate(d: string | null | undefined): string {

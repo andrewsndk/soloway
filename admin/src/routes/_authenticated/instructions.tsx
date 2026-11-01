@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { fetchSettings, saveSettings, DEFAULT_SETTINGS, type AppSettings } from "@/lib/settings";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
+import { useFinanceAccess } from '@/lib/finance-access';
 
 type InstructionRole = "administrator" | "teacher";
 
@@ -26,6 +27,7 @@ export const Route = createFileRoute("/_authenticated/instructions")({
 });
 
 function InstructionsPage() {
+  const finance = useFinanceAccess();
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["settings"], queryFn: fetchSettings });
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -75,7 +77,7 @@ function InstructionsPage() {
           <h1 className="text-2xl font-semibold md:text-3xl">Інструкції</h1>
           <p className="text-sm text-muted-foreground">Внутрішні робочі правила для команди</p>
         </div>
-        <div className="flex gap-2">
+        {finance && <div className="flex gap-2">
           <Button variant="outline" onClick={() => setEditing((v) => !v)}>
             <Edit3 className="mr-1 h-4 w-4" />
             {editing ? "Перегляд" : "Редагувати"}
@@ -84,7 +86,7 @@ function InstructionsPage() {
             <Save className="mr-1 h-4 w-4" />
             {saveMut.isPending ? "Збереження…" : "Зберегти"}
           </Button>
-        </div>
+        </div>}
       </div>
 
       <Tabs value={role} onValueChange={(value) => setRole(value as InstructionRole)}>
