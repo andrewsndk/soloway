@@ -504,8 +504,8 @@ function DashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Stat icon={<CalendarDays className="h-5 w-5" />} label="Заплановано сьогодні" value={todayVisits.scheduled} />
             <Stat icon={<Users className="h-5 w-5" />} label="Дітей завтра" value={visitStats(tomorrowBookings).scheduled} />
-            <Stat icon={<TrendingUp className="h-5 w-5" />} label="Отримано сьогодні" value={formatUAH(todayMoney.received)} />
-            <Stat icon={<CircleAlert className="h-5 w-5" />} label="Очікується оплата" value={formatUAH(todayMoney.expected)} tone="warning" />
+            <Stat icon={<TrendingUp className="h-5 w-5" />} label="Отримано сьогодні" value={formatVisitUAH(todayMoney.received)} />
+            <Stat icon={<CircleAlert className="h-5 w-5" />} label="Очікується оплата" value={formatVisitUAH(todayMoney.expected)} tone="warning" />
           </div>
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">

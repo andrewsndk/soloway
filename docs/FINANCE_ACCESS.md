@@ -10,7 +10,9 @@ VITE_VISIT_AMOUNTS_VISIBLE=true
 Full finance access is reserved for `andrew`, `olena`, and `yulia` at
 `@soloway.local`. Other staff retain operational booking and child-profile access,
 including individual visit and subscription prices, payment status and package
-activation. Aggregate sums are masked; Statistics, exports, receipts, settings
+activation. The two operational dashboard totals, received today and expected
+payment for today, are visible to all staff. Other aggregate sums are masked;
+Statistics, exports, receipts, settings
 and the financial audit history are not available in their interface.
 
 The database independently restricts cash expenses, receipt metadata/files,
