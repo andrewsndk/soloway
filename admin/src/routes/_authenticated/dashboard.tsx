@@ -27,7 +27,7 @@ import { SubscriptionPanel } from "@/components/SubscriptionPanel";
 import { LunchStatusQuickSelect, LunchStatusSelect } from "@/components/LunchStatus";
 import type { LunchStatus } from "@/lib/lunch";
 import { PAYMENT_STATUSES, statusAfterPaymentChange, hasBookingCharge } from "@/lib/payment";
-import { actualStayMinutes, bookingStartDateTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatUAH, formatVisitUAH } from "@/lib/pricing";
+import { actualStayMinutes, bookingStartDateTime, calcExtraDue, formatDate, formatDateTime, formatDuration, formatTime, formatVisitUAH } from "@/lib/pricing";
 import { formatLabel, fetchSettings } from "@/lib/settings";
 import { compactDiff, logActionQuietly } from "@/lib/audit";
 import { downloadDashboardStatsPdf } from "@/lib/dashboard-report-pdf";
@@ -103,6 +103,7 @@ function DashboardPage() {
   });
   const { data: auditLogs } = useQuery({
     queryKey: ["audit-logs-dashboard"],
+    enabled: finance,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("audit_logs")
@@ -115,7 +116,6 @@ function DashboardPage() {
   });
   const { data: cashExpenses = [] } = useQuery({
     queryKey: ["cash-expenses-dashboard"],
-    enabled: finance,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("cash_expenses")
@@ -191,16 +191,16 @@ function DashboardPage() {
 
   const todayMoney = moneyStats(todaysBookings);
   const statsRange = useMemo(
-    () => getStatsRange(statsRangeMode, {
+    () => getStatsRange(finance ? statsRangeMode : "custom", {
       today,
       weekStart,
       weekEnd,
       monthStart,
       monthEnd,
       customFrom: customStatsFrom,
-      customTo: customStatsTo,
+      customTo: finance ? customStatsTo : customStatsFrom,
     }),
-    [customStatsFrom, customStatsTo, monthEnd, monthStart, statsRangeMode, today, weekEnd, weekStart],
+    [customStatsFrom, customStatsTo, finance, monthEnd, monthStart, statsRangeMode, today, weekEnd, weekStart],
   );
   const statsRangeInvalid = statsRange.start > statsRange.end;
   const periodBookings = useMemo(
@@ -497,7 +497,7 @@ function DashboardPage() {
       <Tabs defaultValue="today" className="space-y-4">
         <TabsList>
           <TabsTrigger value="today">Сьогодні</TabsTrigger>
-          {finance && <TabsTrigger value="stats">Статистика</TabsTrigger>}
+          <TabsTrigger value="stats">{finance ? "Статистика" : "Звіт за день"}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="today" className="space-y-4">
@@ -611,18 +611,18 @@ function DashboardPage() {
           </div>
         </TabsContent>
 
-        {finance && <TabsContent value="stats" className="space-y-4">
+        <TabsContent value="stats" className="space-y-4">
           <Card>
             <CardContent className="flex flex-col gap-4 p-4 lg:flex-row lg:items-end lg:justify-between">
               <div>
-                <CardTitle className="text-lg">Період статистики</CardTitle>
+                <CardTitle className="text-lg">{finance ? "Період статистики" : "Закриття зміни"}</CardTitle>
                 <p className="mt-1 text-sm text-muted-foreground">{statsRange.label}</p>
                 {statsRangeInvalid && (
                   <p className="mt-1 text-sm font-medium text-destructive">Дата початку має бути раніше дати завершення.</p>
                 )}
               </div>
               <div className="grid gap-3 sm:grid-cols-[190px_160px_160px_auto] sm:items-end">
-                <div className="space-y-2">
+                {finance ? <div className="space-y-2">
                   <Label>Показати</Label>
                   <Select value={statsRangeMode} onValueChange={(value) => setStatsRangeMode(value as StatsRangeMode)}>
                     <SelectTrigger>
@@ -635,8 +635,11 @@ function DashboardPage() {
                       <SelectItem value="custom">Свій період</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
-                {statsRangeMode === "custom" && (
+                </div> : <div className="space-y-2">
+                  <Label htmlFor="report-day">Дата звіту</Label>
+                  <Input id="report-day" type="date" value={customStatsFrom} onChange={(event) => setCustomStatsFrom(event.target.value || today)} />
+                </div>}
+                {finance && statsRangeMode === "custom" && (
                   <>
                     <div className="space-y-2">
                       <Label htmlFor="stats-from">Від</Label>
@@ -675,7 +678,7 @@ function DashboardPage() {
             <Stat icon={<Sparkles className="h-5 w-5" />} label="Усього бронювань" value={periodVisits.total} />
             <Stat icon={<CalendarDays className="h-5 w-5" />} label="Активних візитів" value={periodVisits.scheduled} />
             <Stat icon={<CheckCircle2 className="h-5 w-5" />} label="Завершено" value={periodVisits.completed} />
-            <Stat icon={<TrendingUp className="h-5 w-5" />} label="Отримано за період" value={formatUAH(periodMoney.received)} />
+            <Stat icon={<TrendingUp className="h-5 w-5" />} label={finance ? "Отримано за період" : "Отримано за день"} value={formatVisitUAH(periodMoney.received)} />
           </div>
 
           <Card>
@@ -738,6 +741,8 @@ function DashboardPage() {
                 <MoneyLine icon={<AlertTriangle className="h-4 w-4" />} label="Очікується оплата" value={periodMoney.expected} />
                 <MoneyLine icon={<CircleAlert className="h-4 w-4" />} label="Оплачені, але не прийшли" value={periodMoney.noShowPaid} muted />
                 <MoneyLine icon={<CircleAlert className="h-4 w-4" />} label="Скасовано" value={periodMoney.cancelled} muted />
+                <MoneyLine icon={<Banknote className="h-4 w-4" />} label="Витрати готівкою" value={periodCashExpenses} />
+                <MoneyLine icon={<Banknote className="h-4 w-4" />} label="Залишок у касі" value={periodCashBalance} />
               </CardContent>
             </Card>
 
@@ -753,7 +758,7 @@ function DashboardPage() {
                       <div className="text-xs text-muted-foreground">{day.count} візитів</div>
                     </div>
                     <Progress value={(day.amount / maxPeriodAmount) * 100} />
-                    <div className="text-right text-sm font-semibold">{formatUAH(day.amount)}</div>
+                    <div className="text-right text-sm font-semibold">{formatVisitUAH(day.amount)}</div>
                   </div>
                 ))}
               </CardContent>
@@ -761,7 +766,7 @@ function DashboardPage() {
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <Card>
+            {finance && <Card>
               <CardHeader><CardTitle>Останні дії</CardTitle></CardHeader>
               <CardContent className="space-y-3">
                 {(auditLogs ?? []).length === 0 ? (
@@ -777,7 +782,7 @@ function DashboardPage() {
                   </div>
                 ))}
               </CardContent>
-            </Card>
+            </Card>}
 
             <Card>
               <CardHeader><CardTitle>Статуси бронювань за період</CardTitle></CardHeader>
@@ -795,7 +800,7 @@ function DashboardPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>}
+        </TabsContent>
       </Tabs>
 
       <BookingDialog open={bookingOpen} onOpenChange={setBookingOpen} />
@@ -974,15 +979,15 @@ function StatsPdfDialog({
           <div className="grid gap-2 rounded-md border bg-muted/30 p-4 text-sm sm:grid-cols-3">
             <div>
               <div className="text-muted-foreground">Отримано</div>
-              <div className="text-lg font-semibold">{formatUAH(received)}</div>
+              <div className="text-lg font-semibold">{formatVisitUAH(received)}</div>
             </div>
             <div>
               <div className="text-muted-foreground">Витрати</div>
-              <div className="text-lg font-semibold">{formatUAH(expensesTotal)}</div>
+              <div className="text-lg font-semibold">{formatVisitUAH(expensesTotal)}</div>
             </div>
             <div>
               <div className="text-muted-foreground">Після витрат</div>
-              <div className="text-lg font-semibold">{formatUAH(received - expensesTotal)}</div>
+              <div className="text-lg font-semibold">{formatVisitUAH(received - expensesTotal)}</div>
             </div>
           </div>
         </div>
@@ -1356,7 +1361,7 @@ function MoneyLine({ icon, label, value, muted }: { icon: React.ReactNode; label
           {icon}
           {label}
         </div>
-        <div className="font-semibold">{formatUAH(value)}</div>
+        <div className="font-semibold">{formatVisitUAH(value)}</div>
       </div>
       <Separator className="mt-3" />
     </div>

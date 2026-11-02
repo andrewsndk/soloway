@@ -73,7 +73,7 @@ function AuthedLayout() {
             <SidebarGroup>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {NAV.filter((item) => finance || !['/receipts', '/settings', '/audit'].includes(item.to)).map((item) => {
+                  {NAV.filter((item) => finance || !['/settings', '/audit'].includes(item.to)).map((item) => {
                     const active = pathname === item.to || pathname.startsWith(item.to + "/");
                     return (
                       <SidebarMenuItem key={item.to}>

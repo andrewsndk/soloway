@@ -1,5 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
-import { canSeeFinance } from '@/lib/finance-access';
+import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Plus, ReceiptText, Trash2 } from "lucide-react";
@@ -19,7 +18,6 @@ type ReceiptRow = Tables<"expense_receipts">;
 type ExpenseRow = Tables<"cash_expenses">;
 
 export const Route = createFileRoute("/_authenticated/receipts")({
-  beforeLoad: () => { if (!canSeeFinance()) throw redirect({ to: '/dashboard' }); },
   head: () => ({ meta: [{ title: "Чеки — Soloway CRM" }] }),
   component: ReceiptsPage,
 });

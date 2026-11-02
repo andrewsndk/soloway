@@ -18,6 +18,11 @@ export function canSeeVisitAmounts() {
 export function requireFinanceAccess() {
   if (!visible) throw new Error('Доступ до фінансів обмежено.');
 }
+export function requireReportAccess(dates: string[]) {
+  if (!visible && (dates.length !== 1 || !/^\d{4}-\d{2}-\d{2}$/.test(dates[0]))) {
+    throw new Error('Доступний лише звіт за один день.');
+  }
+}
 export function useFinanceAccess() {
   return useSyncExternalStore((listener) => { listeners.add(listener); return () => listeners.delete(listener); }, canSeeFinance, () => !enforced);
 }

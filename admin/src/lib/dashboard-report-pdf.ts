@@ -50,8 +50,8 @@ const pageHeightPx = Math.round(pageWidthPx * 297 / 210);
 const margin = 64;
 
 export async function downloadDashboardStatsPdf(input: DashboardStatsPdfInput) {
-  const { requireFinanceAccess } = await import('./finance-access');
-  requireFinanceAccess();
+  const { requireReportAccess } = await import('./finance-access');
+  requireReportAccess(input.days.map((day) => day.date));
   const { jsPDF } = await import("jspdf");
   const canvas = await drawReportCanvas(input);
   const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });

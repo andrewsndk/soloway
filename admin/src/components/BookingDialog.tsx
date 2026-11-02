@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { canSeeFinance, canSeeVisitAmounts } from '@/lib/finance-access';
+import { canSeeVisitAmounts } from '@/lib/finance-access';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -650,16 +650,16 @@ export function BookingDialog({
                 type={canSeeVisitAmounts() ? "number" : "text"}
                 min="0"
                 value={canSeeVisitAmounts() ? draft.amount : '****'}
-                disabled={!canSeeFinance() || !draft.amount_override}
+                disabled={!draft.amount_override}
                 onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
               />
-              {canSeeFinance() && <label className="flex items-center gap-1 text-xs whitespace-nowrap">
+              <label className="flex items-center gap-1 text-xs whitespace-nowrap">
                 <Checkbox
                   checked={draft.amount_override}
                   onCheckedChange={(v) => setDraft({ ...draft, amount_override: !!v })}
                 />
                 Вручну
-              </label>}
+              </label>
             </div>
           </Field>
           <Field label="Тип оплати">
